@@ -21,6 +21,8 @@ class SolutionModel(nn.Module):
             nn.Linear(6, 1),
             nn.Sigmoid(),
         )
+        for param in self.model.parameters():
+            nn.init.uniform_(param, -1.0, +1.0)
 
     def forward(self, x):
         return self.model.forward(x)
@@ -39,10 +41,7 @@ class Solution():
         self = self
 
     def create_model(self, input_size, output_size):
-        model = SolutionModel(input_size, output_size)
-        for param in model.parameters():
-            nn.init.uniform_(param, -1.0, +1.0)
-        return model
+        return SolutionModel(input_size, output_size)
 
     # Return number of steps used
     def train_model(self, model, train_data, train_target, context):
