@@ -13,19 +13,21 @@ class SolutionModel(nn.Module):
         super(SolutionModel, self).__init__()
         self.input_size = input_size
         sm.SolutionManager.print_hint("Hint[1]: Xor can not be learned with only one layer")
-        self.hidden_size = 1
-        self.linear1 = nn.Linear(input_size, self.hidden_size)
-        self.linear2 = nn.Linear(self.hidden_size, output_size)
+        self.model = nn.Sequential(
+            nn.Linear(2, 6),
+            nn.LeakyReLU(),
+            nn.Linear(6, 6),
+            nn.LeakyReLU(),
+            nn.Linear(6, 1),
+            nn.Sigmoid(),
+        )
 
     def forward(self, x):
-        x = self.linear1(x)
-        x = torch.sigmoid(x)
-        x = self.linear2(x)
-        x = torch.sigmoid(x)
-        return x
+        return self.model.forward(x)
 
     def calc_loss(self, output, target):
-        loss = ((output-target)**2).sum()
+        loss_fn = nn.BCELoss()
+        loss = loss_fn(output, target)
         return loss
 
     def calc_predict(self, output):
@@ -37,11 +39,15 @@ class Solution():
         self = self
 
     def create_model(self, input_size, output_size):
-        return SolutionModel(input_size, output_size)
+        model = SolutionModel(input_size, output_size)
+        for param in model.parameters():
+            nn.init.uniform_(param, -1.0, +1.0)
+        return model
 
     # Return number of steps used
     def train_model(self, model, train_data, train_target, context):
         step = 0
+        prev_loss = None
         # Put model in train mode
         model.train()
         while True:
@@ -50,7 +56,7 @@ class Solution():
             if time_left < 0.1:
                 break
             sm.SolutionManager.print_hint("Hint[2]: Learning rate is too small", step)
-            optimizer = optim.SGD(model.parameters(), lr=0.00001)
+            optimizer = optim.RMSprop(model.parameters(), lr=.017, alpha=.95, eps=1e-08, weight_decay=.0, momentum=.0)
             data = train_data
             target = train_target
             # model.parameters()...gradient set to zero
@@ -63,20 +69,18 @@ class Solution():
             correct = predict.eq(target.view_as(predict)).long().sum().item()
             # Total number of needed predictions
             total = predict.view(-1).size(0)
+            if correct == total:
+                print("Step = {} Prediction = {}/{} Error = {}".format(step, correct, total, prev_loss))
+                break
             # calculate loss
             loss = model.calc_loss(output, target)
             # calculate deriviative of model.forward() and put it in model.parameters()...gradient
             loss.backward()
-            # print progress of the learning
-            self.print_stats(step, loss, correct, total)
             # update model: model.parameters() -= lr * gradient
             optimizer.step()
+            prev_loss = loss.item()
             step += 1
         return step
-
-    def print_stats(self, step, loss, correct, total):
-        if step % 1000 == 0:
-            print("Step = {} Prediction = {}/{} Error = {}".format(step, correct, total, loss.item()))
 
 ###
 ###
