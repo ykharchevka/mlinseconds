@@ -12,21 +12,22 @@ from ..utils import solutionmanager as sm
 from ..utils.gridsearch import GridSearch
 
 class SolutionModel(nn.Module):
-    def __init__(self, input_size, output_size, hidden_size, hidden_depth):
+    def __init__(self, input_size, output_size, solution):
         super(SolutionModel, self).__init__()
         self.input_size = input_size
-        sm.SolutionManager.print_hint("Hint[1]: Explore more deep neural networks")
+        self._s = solution
+        # sm.SolutionManager.print_hint("Hint[1]: Explore more deep neural networks")
         hidden_layers = []
-        for i in range(hidden_depth):
+        for i in range(self._s.hidden_depth):
             hidden_layers.extend([
-                nn.Linear(hidden_size, hidden_size),
+                nn.Linear(self._s.hidden_size, self._s.hidden_size),
                 nn.LeakyReLU()
             ])
         self.model = nn.Sequential(
-            nn.Linear(self.input_size, hidden_size),
+            nn.Linear(self.input_size, self._s.hidden_size),
             nn.LeakyReLU(),
             *hidden_layers,
-            nn.Linear(hidden_size, output_size),
+            nn.Linear(self._s.hidden_size, output_size),
             nn.Sigmoid(),
         )
         for param in self.model.parameters():
@@ -37,7 +38,14 @@ class SolutionModel(nn.Module):
 
     def calc_loss(self, output, target):
         loss_fn = nn.BCELoss()
-        loss = loss_fn(output, target)
+        loss = None
+        try:
+            loss = loss_fn(output, target)
+        except RuntimeError:
+            print(
+                'Runtime error occurred with hidden_depth={}, hidden_size={}, lr={}'
+                .format(self._s.hidden_depth, self._s.hidden_size, self._s.lr)
+            )
         return loss
 
     def calc_predict(self, output):
@@ -46,16 +54,20 @@ class SolutionModel(nn.Module):
 
 class Solution():
     def __init__(self):
+        self.hidden_depth = 2
+        self.hidden_depth_grid = [1, 2, 3, 4, 5, 10, 15]
+        self.hidden_size = 16
+        self.hidden_size_grid = [4, 8, 16, 32, 64, 128, 256]
         self.lr = 0.01
-        self.lr_grid = [.01, .1, 1., 10., 100.]
-        self.hidden_size = 5
-        self.hidden_size_grid = [1, 2, 3, 4, 5, 6, 7, 8]
-        self.hidden_depth = 4
-        self.hidden_depth_grid = [1, 2, 3, 4, 5, 6, 7, 8]
-        self.grid_search = GridSearch(self).set_enabled(False)  # TODO: set to True, if grid search needed
+        self.lr_grid = [0.0001, 0.0005, 0.001, 0.005, 0.01, 0.1]
+        self.alpha = 0.999
+        self.alpha_grid = [0.999, 0.99, 0.98, 0.97, 0.96, 0.95]
+        self.momentum = 0.
+        self.momentum_grid = [0.0, 0.1, 0.2, 0.3, 0.4, 0.5]
+        self.grid_search = GridSearch(self).set_enabled(True)  # TODO: set to True, if grid search needed
 
     def create_model(self, input_size, output_size):
-        return SolutionModel(input_size, output_size, self.hidden_size, self.hidden_depth)
+        return SolutionModel(input_size, output_size, self)
 
     # Return number of steps used
     def train_model(self, model, train_data, train_target, context):
@@ -65,14 +77,14 @@ class Solution():
         while True:
             time_left = context.get_timer().get_time_left()
             # No more time left, stop training
-            if time_left < 0.1:
+            if time_left < 0.1 or step >= 100:
                 break
             optimizer = optim.RMSprop(
                 model.parameters(),
                 lr=self.lr,
-                alpha=.95,
+                alpha=self.alpha,
                 weight_decay=.0,
-                momentum=.0,
+                momentum=self.momentum,
                 eps=1e-08,
             )
             data = train_data
@@ -80,7 +92,7 @@ class Solution():
             # model.parameters()...gradient set to zero
             optimizer.zero_grad()
             # evaluate model => model.forward(data)
-            sm.SolutionManager.print_hint("Hint[2]: Explore other activation functions", step)
+            # sm.SolutionManager.print_hint("Hint[2]: Explore other activation functions", step)
             output = model(data)
             # if x < 0.5 predict 0 else predict 1
             predict = model.calc_predict(output)
@@ -88,24 +100,28 @@ class Solution():
             correct = predict.eq(target.view_as(predict)).long().sum().item()
             # Total number of needed predictions
             total = predict.view(-1).size(0)
-            if correct == total:
-                break
             # calculate loss
-            sm.SolutionManager.print_hint("Hint[3]: Explore other loss functions", step)
+            # sm.SolutionManager.print_hint("Hint[3]: Explore other loss functions", step)
             loss = model.calc_loss(output, target)
+            if loss is None:
+                correct = 0
+                break
+            if correct == total:
+                self.print_stats(step, loss.item(), correct, total)
+                break
             self.grid_search.log_step_value('loss', loss.item(), step)
             # calculate deriviative of model.forward() and put it in model.parameters()...gradient
             loss.backward()
-            # print progress of the learning
-            self.print_stats(step, loss, correct, total)
             # update model: model.parameters() -= lr * gradient
             optimizer.step()
             step += 1
         return step
-    
+
     def print_stats(self, step, loss, correct, total):
-        if step % 1000 == 0:
-            print("Step = {} Prediction = {}/{} Error = {}".format(step, correct, total, loss.item()))
+        print(
+            "Step = {:>3} Prediction = {:>2}/{:>2} Error = {:>20} if hidden_depth={:>3}, hidden_size={:>3}, lr={:>10}, alpha={:>5}, momentum={:>3}"
+            .format(step, correct, total, loss, self.hidden_depth, self.hidden_size, self.lr, self.alpha, self.momentum)
+        )
 
 ###
 ###
@@ -158,4 +174,4 @@ class Config:
         return Solution()
 
 # If you want to run specific case, put number here
-sm.SolutionManager(Config()).run(case_number=-1)
+sm.SolutionManager(Config()).run(case_number=10)
