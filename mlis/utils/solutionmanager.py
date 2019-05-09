@@ -196,16 +196,16 @@ class SolutionManager():
             test_correct, test_total, test_ratio, limits.test_limit, test_loss))
         r['accepted'] = False
         if size > limits.size_limit:
-            print(self.rejected_string("[REJECTED]")+": MODEL IS TOO BIG: Size={} Size Limit={}".format(size, limits.size_limit))
+            print("[REJECTED]: MODEL IS TOO BIG: Size={} Size Limit={}".format(size, limits.size_limit))
         elif time > limits.time_limit:
-            print(self.rejected_string("[REJECTED]")+": TIME LIMIT EXCEEDED: Time={:.1f} Time Limit={:.1f}".format(time, limits.time_limit))
+            print("[REJECTED]: TIME LIMIT EXCEEDED: Time={:.1f} Time Limit={:.1f}".format(time, limits.time_limit))
         elif test_ratio < limits.test_limit:
-            print(self.rejected_string("[REJECTED]")+": MODEL DID NOT LEARN: Learn ratio={}/{}".format(test_ratio, limits.test_limit))
+            print("[REJECTED]: MODEL DID NOT LEARN: Learn ratio={}/{}".format(test_ratio, limits.test_limit))
         elif reject_reason is not None:
-            print(self.rejected_string("[REJECTED]")+": " + reject_reason)
+            print("[REJECTED]: " + reject_reason)
         else:
             r['accepted'] = True
-            print(self.accepted_string("[OK]"))
+            print("[OK]")
 
         return r
 
@@ -248,8 +248,8 @@ class SolutionManager():
         print("Average time = {:.3f}/{:.3f}".format(time_mean, time_limit_mean))
         print("Average size = {:.3f}/{:.3f}".format(size_mean, size_limit_mean))
         if case_number == -1:
-            print(self.accepted_string("[ACCEPTED]")+" you can submit now your score")
+            print("[ACCEPTED] you can submit now your score")
             print("In order to submit just do a Facebook comment with your score")
         else:
-            print(self.hint_string("[GOOD]")+" test passed, try to run on all tests")
+            print("[GOOD] test passed, try to run on all tests")
 

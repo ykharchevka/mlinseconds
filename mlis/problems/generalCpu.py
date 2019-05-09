@@ -38,15 +38,7 @@ class SolutionModel(nn.Module):
 
     def calc_loss(self, output, target):
         loss_fn = nn.BCELoss()
-        loss = None
-        try:
-            loss = loss_fn(output, target)
-        except RuntimeError:
-            print(
-                'Runtime error occurred with hidden_depth={}, hidden_size={}, lr={}'
-                .format(self._s.hidden_depth, self._s.hidden_size, self._s.lr)
-            )
-        return loss
+        return loss_fn(output, target)
 
     def calc_predict(self, output):
         predict = output.round()
@@ -55,42 +47,53 @@ class SolutionModel(nn.Module):
 class Solution():
     def __init__(self):
         self.hidden_depth = 2
-        self.hidden_depth_grid = [1, 2, 3, 4, 5, 10, 15]
-        self.hidden_size = 16
-        self.hidden_size_grid = [4, 8, 16, 32, 64, 128, 256]
-        self.lr = 0.01
-        self.lr_grid = [0.0001, 0.0005, 0.001, 0.005, 0.01, 0.1]
-        self.alpha = 0.999
-        self.alpha_grid = [0.999, 0.99, 0.98, 0.97, 0.96, 0.95]
-        self.momentum = 0.
-        self.momentum_grid = [0.0, 0.1, 0.2, 0.3, 0.4, 0.5]
-        self.grid_search = GridSearch(self).set_enabled(True)  # TODO: set to True, if grid search needed
+        self.hidden_depth_grid = [2]
+        self.hidden_size = 14
+        self.hidden_size_grid = [8]
+        self.lr = 0.8  # 1
+        self.lr_grid = [0.03]
+        self.max_iter = 20  # 20
+        self.max_iter_grid = [20]
+        self.history_size = 100  # 100
+        self.history_size_grid = [100]
+        self.tolerance_grad = 1e-5  # 1e-5
+        self.tolerance_grad_grid = [1e-5]
+        self.grid_search = GridSearch(self).set_enabled(False)
 
     def create_model(self, input_size, output_size):
         return SolutionModel(input_size, output_size, self)
 
     # Return number of steps used
     def train_model(self, model, train_data, train_target, context):
+        def closure():
+            # model.parameters()...gradient set to zero
+            optimizer.zero_grad()
+            # evaluate model => model.forward(data)
+            output = model(data)
+            # calculate loss
+            loss = model.calc_loss(output, target)
+            # calculate deriviative of model.forward() and put it in model.parameters()...gradient
+            loss.backward()
+            return loss
+
+        # https://pytorch.org/docs/stable/optim.html#torch.optim.LBFGS
+        optimizer = optim.LBFGS(
+            model.parameters(),
+            lr=self.lr,
+            max_iter=self.max_iter,
+            history_size=self.history_size
+        )
+
         step = 0
         # Put model in train mode
         model.train()
         while True:
             time_left = context.get_timer().get_time_left()
             # No more time left, stop training
-            if time_left < 0.1 or step >= 100:
+            if time_left < 0.1 or step >= 10:
                 break
-            optimizer = optim.RMSprop(
-                model.parameters(),
-                lr=self.lr,
-                alpha=self.alpha,
-                weight_decay=.0,
-                momentum=self.momentum,
-                eps=1e-08,
-            )
             data = train_data
             target = train_target
-            # model.parameters()...gradient set to zero
-            optimizer.zero_grad()
             # evaluate model => model.forward(data)
             # sm.SolutionManager.print_hint("Hint[2]: Explore other activation functions", step)
             output = model(data)
@@ -103,25 +106,14 @@ class Solution():
             # calculate loss
             # sm.SolutionManager.print_hint("Hint[3]: Explore other loss functions", step)
             loss = model.calc_loss(output, target)
-            if loss is None:
-                correct = 0
-                break
             if correct == total:
-                self.print_stats(step, loss.item(), correct, total)
                 break
             self.grid_search.log_step_value('loss', loss.item(), step)
-            # calculate deriviative of model.forward() and put it in model.parameters()...gradient
-            loss.backward()
             # update model: model.parameters() -= lr * gradient
-            optimizer.step()
+            optimizer.step(closure)
             step += 1
         return step
 
-    def print_stats(self, step, loss, correct, total):
-        print(
-            "Step = {:>3} Prediction = {:>2}/{:>2} Error = {:>20} if hidden_depth={:>3}, hidden_size={:>3}, lr={:>10}, alpha={:>5}, momentum={:>3}"
-            .format(step, correct, total, loss, self.hidden_depth, self.hidden_size, self.lr, self.alpha, self.momentum)
-        )
 
 ###
 ###
@@ -174,4 +166,4 @@ class Config:
         return Solution()
 
 # If you want to run specific case, put number here
-sm.SolutionManager(Config()).run(case_number=10)
+sm.SolutionManager(Config()).run(case_number=-1)
