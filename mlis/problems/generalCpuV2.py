@@ -1,3 +1,10 @@
+'''
+TODOs:
+1. Double check lr, momentum, dampening and ANN size with correct (statefull) version of SGD
+2. And same for RMSprop
+3. Do the same for Adam
+4. Go through https://www.youtube.com/watch?v=1waHlpKiNyY&list=PLkDaE6sCZn6Hn0vK8co82zjQtt3T2Nkqc
+'''
 # You need to learn a function with n inputs.
 # For given number of inputs, we will generate random function.
 # Your task is to learn it
@@ -21,24 +28,32 @@ class SolutionModel(nn.Module):
         for i in range(self._s.hidden_depth):
             hidden_layers.extend([
                 nn.Linear(self._s.hidden_size, self._s.hidden_size),
-                nn.LeakyReLU()
+                nn.Tanh()  # TODO: memorize that ANNs of linear activations model only linear functions
             ])
         self.model = nn.Sequential(
             nn.Linear(self.input_size, self._s.hidden_size),
-            nn.LeakyReLU(),
+            nn.Tanh(),
             *hidden_layers,
+            # TODO !!!!!: maybe, add here couple reducing layers
             nn.Linear(self._s.hidden_size, output_size),
             nn.Sigmoid(),
         )
         for param in self.model.parameters():
-            nn.init.uniform_(param, -1.0, +1.0)
+            nn.init.uniform_(param, -self._s.init, +self._s.init)  # TODO: memorize that extending range brings more non-linearity, otherwise it's about using linear segment of non-linear function
 
     def forward(self, x):
         return self.model.forward(x)
 
     def calc_loss(self, output, target):
         loss_fn = nn.BCELoss()
-        return loss_fn(output, target)
+        loss = None
+        try:
+            loss = loss_fn(output, target)
+        except RuntimeError:
+            print('Runtime error at hidden depth: {}, hidden size: {}, lr: {}, alpha: {}, momentum: {}'.
+                  format(self._s.hidden_depth, self._s.hidden_size, self._s.lr, self._s.alpha, self._s.momentum))
+            exit()
+        return loss
 
     def calc_predict(self, output):
         predict = output.round()
@@ -46,18 +61,21 @@ class SolutionModel(nn.Module):
 
 class Solution():
     def __init__(self):
-        self.hidden_depth = 2
-        self.hidden_depth_grid = [2]
-        self.hidden_size = 14
-        self.hidden_size_grid = [8]
-        self.lr = 0.8  # 1
-        self.lr_grid = [0.03]
-        self.max_iter = 20  # 20
-        self.max_iter_grid = [20]
-        self.history_size = 100  # 100
-        self.history_size_grid = [100]
-        self.tolerance_grad = 1e-5  # 1e-5
-        self.tolerance_grad_grid = [1e-5]
+        # TODO: memorize probable correct approach to hparams tuning: start with default params and first define ANN structure that fully learns
+        self.hidden_depth = 3
+        self.hidden_depth_grid = [3]
+        self.hidden_size = 280
+        self.hidden_size_grid = [280]
+        self.init = 1.  # 0.65
+        self.init_grid = [1.]
+        self.lr = 0.0003626  # 0.0007  # 0.00099 # 0.00025=fail_at_case_3 0.00028=fail_at_case_12 0.00021=fail_at_case_10
+        self.lr_grid = [0.0005]  # 0.00019, 0.00029
+        self.alpha = 0.99
+        self.alpha_grid = [0.99]
+        self.momentum = 0.7  # 0.481  # 0.33, 0.71
+        self.momentum_grid = [0.7]
+        # self.dampening = 0.9
+        # self.dampening_grid = [0.9]
         self.grid_search = GridSearch(self).set_enabled(False)
 
     def create_model(self, input_size, output_size):
@@ -68,12 +86,16 @@ class Solution():
         step = 0
         # Put model in train mode
         model.train()
+        # TODO: memorize - moving optimizer init out of loop fixed momentum + damping
+        # optimizer = optim.SGD(model.parameters(), lr=self.lr, momentum=self.momentum, dampening=self.dampening, weight_decay=0, nesterov=False)
+        optimizer = optim.RMSprop(model.parameters(), lr=self.lr, alpha=self.alpha, eps=1e-08, weight_decay=0, momentum=self.momentum, centered=False)
+        # optimizer = optim.Adam(model.parameters(), lr=self.lr, betas=(0.9, 0.999), eps=1e-08, weight_decay=0, amsgrad=False)
+
         while True:
             time_left = context.get_timer().get_time_left()
             # No more time left, stop training
             if time_left < 0.1 or step >= 10:
                 break
-            optimizer = optim.SGD(model.parameters(), lr=1.0)
             data = train_data
             target = train_target
             # model.parameters()...gradient set to zero
@@ -91,10 +113,11 @@ class Solution():
             # sm.SolutionManager.print_hint("Hint[3]: Explore other loss functions", step)
             loss = model.calc_loss(output, target)
             self.grid_search.log_step_value('loss', loss.item(), step)
-            # calculate deriviative of model.forward() and put it in model.parameters()...gradient
-            loss.backward()
+            self.grid_search.log_step_value('ratio', total / (correct + 1e-8), step)
             if correct == total:
                 break
+            # calculate deriviative of model.forward() and put it in model.parameters()...gradient
+            loss.backward()
             # update model: model.parameters() -= lr * gradient
             optimizer.step()
             step += 1
@@ -152,4 +175,4 @@ class Config:
         return Solution()
 
 # If you want to run specific case, put number here
-sm.SolutionManager(Config()).run(case_number=-1)
+sm.SolutionManager(Config()).run(case_number=4)  # TODO: memorize to optimize starting from the highest complexity

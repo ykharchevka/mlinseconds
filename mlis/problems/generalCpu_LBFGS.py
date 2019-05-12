@@ -21,33 +21,24 @@ class SolutionModel(nn.Module):
         for i in range(self._s.hidden_depth):
             hidden_layers.extend([
                 nn.Linear(self._s.hidden_size, self._s.hidden_size),
-                # TODO: memorize that ANNs of linear activations model only linear functions
-                nn.Tanh()
+                nn.LeakyReLU()
             ])
         self.model = nn.Sequential(
             nn.Linear(self.input_size, self._s.hidden_size),
-            nn.Tanh(),
+            nn.LeakyReLU(),
             *hidden_layers,
             nn.Linear(self._s.hidden_size, output_size),
             nn.Sigmoid(),
         )
         for param in self.model.parameters():
-            # TODO: memorize that extending range brings more non-linearity, otherwise it's about using linear segment of non-linear function
-            nn.init.uniform_(param, -self._s.init, +self._s.init)
+            nn.init.uniform_(param, -1.0, +1.0)
 
     def forward(self, x):
         return self.model.forward(x)
 
     def calc_loss(self, output, target):
         loss_fn = nn.BCELoss()
-        loss = None
-        try:
-            loss = loss_fn(output, target)
-        except RuntimeError:
-            print('Runtime error at hidden depth: {}, hidden size: {}, lr: {}, alpha: {}, momentum: {}'.
-                  format(self._s.hidden_depth, self._s.hidden_size, self._s.lr, self._s.alpha, self._s.momentum))
-            exit()
-        return loss
+        return loss_fn(output, target)
 
     def calc_predict(self, output):
         predict = output.round()
@@ -55,19 +46,18 @@ class SolutionModel(nn.Module):
 
 class Solution():
     def __init__(self):
-        # TODO: memorize probable correct approach to hparams tuning: start with default params and first define ANN structure that fully learns
-        self.hidden_depth = 3
-        self.hidden_depth_grid = [3]
-        self.hidden_size = 50
-        self.hidden_size_grid = [50]
-        self.init = 1.
-        self.init_grid = [1.]
-        self.lr = 0.001
-        self.lr_grid = [0.001]
-        self.alpha = 0.99
-        self.alpha_grid = [0.99]
-        self.momentum = 0.7
-        self.momentum_grid = [0.7]
+        self.hidden_depth = 2
+        self.hidden_depth_grid = [2]
+        self.hidden_size = 14
+        self.hidden_size_grid = [8]
+        self.lr = 0.8  # 1
+        self.lr_grid = [0.03]
+        self.max_iter = 20  # 20
+        self.max_iter_grid = [20]
+        self.history_size = 100  # 100
+        self.history_size_grid = [100]
+        self.tolerance_grad = 1e-5  # 1e-5
+        self.tolerance_grad_grid = [1e-5]
         self.grid_search = GridSearch(self).set_enabled(False)
 
     def create_model(self, input_size, output_size):
@@ -75,12 +65,28 @@ class Solution():
 
     # Return number of steps used
     def train_model(self, model, train_data, train_target, context):
+        def closure():
+            # model.parameters()...gradient set to zero
+            optimizer.zero_grad()
+            # evaluate model => model.forward(data)
+            output = model(data)
+            # calculate loss
+            loss = model.calc_loss(output, target)
+            # calculate deriviative of model.forward() and put it in model.parameters()...gradient
+            loss.backward()
+            return loss
+
+        # https://pytorch.org/docs/stable/optim.html#torch.optim.LBFGS
+        optimizer = optim.LBFGS(
+            model.parameters(),
+            lr=self.lr,
+            max_iter=self.max_iter,
+            history_size=self.history_size
+        )
+
         step = 0
         # Put model in train mode
         model.train()
-        # TODO: memorize - moving optimizer init out of loop fixed momentum + damping
-        optimizer = optim.RMSprop(model.parameters(), lr=self.lr, alpha=self.alpha, eps=1e-08, weight_decay=0, momentum=self.momentum, centered=False)
-
         while True:
             time_left = context.get_timer().get_time_left()
             # No more time left, stop training
@@ -88,8 +94,6 @@ class Solution():
                 break
             data = train_data
             target = train_target
-            # model.parameters()...gradient set to zero
-            optimizer.zero_grad()
             # evaluate model => model.forward(data)
             # sm.SolutionManager.print_hint("Hint[2]: Explore other activation functions", step)
             output = model(data)
@@ -102,14 +106,11 @@ class Solution():
             # calculate loss
             # sm.SolutionManager.print_hint("Hint[3]: Explore other loss functions", step)
             loss = model.calc_loss(output, target)
-            self.grid_search.log_step_value('loss', loss.item(), step)
-            self.grid_search.log_step_value('ratio', total / (correct + 1e-8), step)
             if correct == total:
                 break
-            # calculate deriviative of model.forward() and put it in model.parameters()...gradient
-            loss.backward()
+            self.grid_search.log_step_value('loss', loss.item(), step)
             # update model: model.parameters() -= lr * gradient
-            optimizer.step()
+            optimizer.step(closure)
             step += 1
         return step
 
@@ -165,5 +166,4 @@ class Config:
         return Solution()
 
 # If you want to run specific case, put number here
-# TODO: memorize to optimize starting from the highest complexity
 sm.SolutionManager(Config()).run(case_number=-1)
