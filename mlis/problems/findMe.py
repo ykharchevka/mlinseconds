@@ -1,6 +1,7 @@
 '''
 No 10 steps condition for the task
 TODOs:
+0. What are the fastest activations, loss and optim?
 1. Binnary_cross_entropy vs BCEloss
 2. BatchNorm1d + track running stats = False
 3. relu vs relu6
