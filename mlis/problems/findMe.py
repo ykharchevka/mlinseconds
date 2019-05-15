@@ -32,25 +32,28 @@ class SolutionModel(nn.Module):
     def __init__(self, input_size, output_size, solution):
         super(SolutionModel, self).__init__()
         self.input_size = input_size
-        self._s = solution
-        hidden_layers = []
-        for i in range(self._s.hidden_depth):
-            hidden_layers.extend([
-                nn.Linear(self._s.hidden_size, self._s.hidden_size),
-                nn.Tanh()
-            ])
-        self.model = nn.Sequential(
-            nn.Linear(self.input_size, self._s.hidden_size),
-            nn.Tanh(),
-            *hidden_layers,
-            nn.Linear(self._s.hidden_size, output_size),
-            nn.Sigmoid(),
-        )
-        for param in self.model.parameters():
-            nn.init.uniform_(param, -self._s.init, +self._s.init)
+        self.output_size = output_size
+        self.solution = solution
+        # different seed for removing noise
+        if self.solution.grid_search.enabled:
+            torch.manual_seed(solution.random)
+        self.hidden_size = self.solution.hidden_size
+        self.linears = nn.ModuleList([nn.Linear(
+            self.input_size if i == 0 else self.hidden_size,
+            self.hidden_size if i != self.solution.layers_number-1 else self.output_size
+        ) for i in range(self.solution.layers_number)])
+        self.batch_norms = nn.ModuleList([nn.BatchNorm1d(
+            self.hidden_size if i != self.solution.layers_number-1 else self.output_size, track_running_stats=False
+        ) for i in range(self.solution.layers_number)])
 
     def forward(self, x):
-        return self.model.forward(x)
+        for i in range(len(self.linears)):
+            x = self.linears[i](x)
+            if self.solution.do_batch_norm:
+                x = self.batch_norms[i](x)
+            act_function = self.solution.activation_output if i == len(self.linears)-1 else self.solution.activation_hidden
+            x = self.solution.activations[act_function](x)
+        return x
 
     def calc_loss(self, output, target):
         loss_fn = nn.BCELoss()
@@ -69,35 +72,56 @@ class SolutionModel(nn.Module):
 
 class Solution():
     def __init__(self):
-        self.hidden_depth = 2  # 3
-        self.hidden_depth_grid = [3]
-        self.hidden_size = 50  # 50
-        self.hidden_size_grid = [50]
-        self.init = 1.
-        self.init_grid = [1.]
-        self.lr = 0.001
-        self.lr_grid = [0.001]
-        self.alpha = 0.99
-        self.alpha_grid = [0.99]
-        self.momentum = 0.7
-        self.momentum_grid = [0.7]
-        self.grid_search = GridSearch(self).set_enabled(False)
+        self = self
+        self.sols = {}
+        self.solsSum = {}
+        self.best_step = 1000
+        self.activations = {
+            'sigmoid': nn.Sigmoid(),
+            'relu': nn.ReLU(),
+            'rrelu0103': nn.RReLU(0.1, 0.3),
+            'elu': nn.ELU(),
+            'selu': nn.SELU(),
+            'leakyrelu01': nn.LeakyReLU(0.1)
+        }
+        self.layers_number = 5
+        # self.layers_number_grid = [3, 4, 5, 6, 7, 8, 9, 10]
+        self.hidden_size = 50
+        # self.hidden_size_grid = [10, 20, 30, 40, 50]
+        self.do_batch_norm = True
+        # self.do_batch_norm_grid = [False, True]
+        self.activation_hidden = 'relu'
+        # self.activation_hidden_grid = self.activations.keys()
+        self.activation_output = 'sigmoid'
+        # self.activation_output_grid = self.activations.keys()
+        self.learning_rate = 0.003
+        # self.learning_rate_grid = [0.002, 0.003, 0.004, 0.005, 0.006, 0.007, 0.008, 0.009, 0.01]
+        self.momentum = 0.8
+        self.momentum_grid = [0.0, 0.3, 0.5, 0.6, 0.7, 0.8, 0.9, 1.0]
+        self.random = 0
+        self.random_grid = [_ for _ in range(10)]
+        self.grid_search = GridSearch(self)
+        self.grid_search.set_enabled(False)
 
     def create_model(self, input_size, output_size):
         return SolutionModel(input_size, output_size, self)
 
+    def get_key(self):
+        return "{}_{}_{}_{}_{}_{}_{}".format(self.learning_rate, self.momentum, self.hidden_size, self.activation_hidden, self.activation_output, self.do_batch_norm, "{0:03d}".format(self.layers_number))
+
     # Return number of steps used
     def train_model(self, model, train_data, train_target, context):
+        key = self.get_key()
+        if key in self.sols and self.sols[key] == -1:
+            return
         step = 0
         # Put model in train mode
         model.train()
-        optimizer = optim.RMSprop(model.parameters(), lr=self.lr, alpha=self.alpha, eps=1e-08, weight_decay=0,
-                                  momentum=self.momentum, centered=False)
+        # optimizer = optim.SGD(model.parameters(), lr=self.learning_rate, momentum=self.momentum)
+        optimizer = optim.RMSprop(model.parameters(), lr=self.learning_rate, momentum=self.momentum,
+                                  alpha=0.99, weight_decay=0, eps=1e-08, centered=False)
         while True:
             time_left = context.get_timer().get_time_left()
-            # No more time left, stop training
-            if time_left < 0.1:
-                break
             data = train_data
             target = train_target
             # model.parameters()...gradient set to zero
@@ -110,6 +134,15 @@ class Solution():
             correct = predict.eq(target.view_as(predict)).long().sum().item()
             # Total number of needed predictions
             total = predict.view(-1).size(0)
+            if correct == total or time_left < 0.1 or (self.grid_search.enabled and step > 100):
+                if not key in self.sols:
+                    self.sols[key] = 0
+                    self.solsSum[key] = 0
+                self.sols[key] += 1
+                self.solsSum[key] += step
+                if self.sols[key] == len(self.random_grid):
+                    print("{} {:.4f}".format(key, float(self.solsSum[key])/self.sols[key]))
+                break
             # calculate loss
             loss = model.calc_loss(output, target)
             self.grid_search.log_step_value('loss', loss.item(), step)

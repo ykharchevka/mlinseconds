@@ -61,7 +61,7 @@ class GridSearch():
                 else:
                     attr_ind = choice_ind%attr_list_size
                     choice_ind /= attr_list_size
-                grid_choice[attr] = attr_list[attr_ind]
+                grid_choice[attr] = list(attr_list)[attr_ind]
             choice_str = self.grid_choice_to_str(grid_choice)
             if choice_str not in grid_choice_history:
                 return choice_str, grid_choice
