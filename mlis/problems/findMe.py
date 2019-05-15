@@ -2,7 +2,7 @@
 No 10 steps condition for the task
 TODOs:
 0. What are the fastest activations, loss and optim?
-1. Binnary_cross_entropy vs BCEloss
+1. Binary_cross_entropy vs BCEloss
 2. BatchNorm1d + track running stats = False
 3. relu vs relu6
 4. relu vs prelu + -> [-1, 1] ->> [-0.5, 0.5] or [-4.5, 4.5]
@@ -96,12 +96,12 @@ class Solution():
         # self.activation_output_grid = self.activations.keys()
         self.learning_rate = 0.003
         # self.learning_rate_grid = [0.002, 0.003, 0.004, 0.005, 0.006, 0.007, 0.008, 0.009, 0.01]
-        self.momentum = 0.8
+        self.momentum = 1.  # 0.8
         self.momentum_grid = [0.0, 0.3, 0.5, 0.6, 0.7, 0.8, 0.9, 1.0]
         self.random = 0
         self.random_grid = [_ for _ in range(10)]
         self.grid_search = GridSearch(self)
-        self.grid_search.set_enabled(False)
+        self.grid_search.set_enabled(True)
 
     def create_model(self, input_size, output_size):
         return SolutionModel(input_size, output_size, self)
@@ -142,6 +142,9 @@ class Solution():
                 self.solsSum[key] += step
                 if self.sols[key] == len(self.random_grid):
                     print("{} {:.4f}".format(key, float(self.solsSum[key])/self.sols[key]))
+                    print('solsSum: ', self.solsSum[key])
+                    print('sols   : ', self.sols[key])
+                    print('-----------------')
                 break
             # calculate loss
             loss = model.calc_loss(output, target)
@@ -149,7 +152,7 @@ class Solution():
             # calculate deriviative of model.forward() and put it in model.parameters()...gradient
             loss.backward()
             # print progress of the learning
-            self.print_stats(step, loss, correct, total)
+            # self.print_stats(step, loss, correct, total)
             # update model: model.parameters() -= lr * gradient
             optimizer.step()
             step += 1
