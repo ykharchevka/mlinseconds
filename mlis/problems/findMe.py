@@ -1,19 +1,20 @@
 '''
 No 10 steps condition for the task
 TODOs:
-0. What are the fastest activations, loss and optim?
-1. Binary_cross_entropy vs BCEloss
-2. BatchNorm1d + track running stats = False
-3. relu vs relu6
-4. relu vs prelu + -> [-1, 1] ->> [-0.5, 0.5] or [-4.5, 4.5]
-5. use model averaging to improve the accuracy
+0. What are the fastest activations -> TBD, loss -> TBD and optim -> probably SGD?
+1. + Binary_cross_entropy vs BCEloss -> same
+2. + BatchNorm1d + track running stats = False
+3. + relu vs relu6
+4. + relu vs prelu
+5. inputs normalization: [0, 1] ->> [-0.5, 0.5] or [-4.5, 4.5]
+6. use model averaging to improve the accuracy
  - so instead of one [24, 24, 24] network I created an architecture
  of three different [24, 24, 24] chains of hidden layers
  combined with a [72, 1] layer on top
-6. use bilinear layers to get feature crosses (not helped with generalCpu)
+7. use bilinear layers to get feature crosses (not helped with generalCpu)
  - mistake was doing this as one of the last steps, not one of the first steps
  - could've saved a lot of grid search time
-7. https://www.youtube.com/watch?v=BOCLq2gpcGU&list=PLkDaE6sCZn6Hn0vK8co82zjQtt3T2Nkqc&index=8
+8. https://www.youtube.com/watch?v=BOCLq2gpcGU&list=PLkDaE6sCZn6Hn0vK8co82zjQtt3T2Nkqc&index=8
 '''
 # There are random function from 8 inputs and X random inputs added.
 # We split data in 2 parts, on first part you will train and on second
@@ -57,13 +58,20 @@ class SolutionModel(nn.Module):
 
     def calc_loss(self, output, target):
         loss_fn = nn.BCELoss()
-        loss = None
         try:
             loss = loss_fn(output, target)
         except RuntimeError:
-            print('Runtime error at hidden depth: {}, hidden size: {}, lr: {}, alpha: {}, momentum: {}'.
-                  format(self._s.hidden_depth, self._s.hidden_size, self._s.lr, self._s.alpha, self._s.momentum))
-            exit()
+            print('Runtime error at hidden depth: {}, hidden size: {}, activations: {}->{}, batch norm: {}, '
+                  'lr: {}, momentum: {}, random: {}'.
+                  format(self.solution.layers_number,
+                         self.solution.hidden_size,
+                         self.solution.activation_hidden,
+                         self.solution.activation_output,
+                         self.solution.do_batch_norm,
+                         self.solution.learning_rate,
+                         self.solution.momentum,
+                         self.solution.random))
+            return False
         return loss
 
     def calc_predict(self, output):
@@ -74,40 +82,48 @@ class Solution():
     def __init__(self):
         self = self
         self.sols = {}
-        self.solsSum = {}
+        self.worst_loss = {}
+        self.worst_prediction = {}
+        self.worst_time_left = {}
+        self.worst_steps = {}
         self.best_step = 1000
         self.activations = {
             'sigmoid': nn.Sigmoid(),
             'relu': nn.ReLU(),
             'rrelu0103': nn.RReLU(0.1, 0.3),
-            'elu': nn.ELU(),
-            'selu': nn.SELU(),
+            'relu6': nn.ReLU6(),
+            'prelu': nn.PReLU(),
+            'elu': nn.ELU(),  # Exponential Linear Unit
+            'selu': nn.SELU(),  # Self-Normalizing Neural Networks
             'leakyrelu01': nn.LeakyReLU(0.1)
         }
-        self.layers_number = 5
-        # self.layers_number_grid = [3, 4, 5, 6, 7, 8, 9, 10]
+        self.layers_number = 3
+        self.layers_number_grid = [2, 3, 5, 6, 10]
         self.hidden_size = 50
-        # self.hidden_size_grid = [10, 20, 30, 40, 50]
+        self.hidden_size_grid = [10, 20, 30, 50]
         self.do_batch_norm = True
-        # self.do_batch_norm_grid = [False, True]
+        self.do_batch_norm_grid = [False, True]
         self.activation_hidden = 'relu'
-        # self.activation_hidden_grid = self.activations.keys()
+        self.activation_hidden_grid = self.activations.keys()
         self.activation_output = 'sigmoid'
         # self.activation_output_grid = self.activations.keys()
         self.learning_rate = 0.003
-        # self.learning_rate_grid = [0.002, 0.003, 0.004, 0.005, 0.006, 0.007, 0.008, 0.009, 0.01]
-        self.momentum = 0.7  # 0.8
-        self.momentum_grid = [0.0, 0.3, 0.5, 0.6, 0.7, 0.8, 0.9, 1.0]
+        self.learning_rate_grid = [0.0001, 0.001, 0.01, 0.1]
+        self.momentum = 0.  # 0.8
+        # self.momentum_grid = [0.0, 0.3, 0.5, 0.6, 0.7, 0.8, 0.9, 1.0]
         self.random = 0
         self.random_grid = [_ for _ in range(10)]
         self.grid_search = GridSearch(self)
         self.grid_search.set_enabled(True)
+        self.grid_search_counter = 0
+        self.grid_search_size = eval('*'.join([str(len(v)) for k, v in self.__dict__.items() if k.endswith('_grid')]))
 
     def create_model(self, input_size, output_size):
         return SolutionModel(input_size, output_size, self)
 
     def get_key(self):
-        return "{}_{}_{}_{}_{}_{}_{}".format(self.learning_rate, self.momentum, self.hidden_size, self.activation_hidden, self.activation_output, self.do_batch_norm, "{0:03d}".format(self.layers_number))
+        return "{}_{}_{}_{}_{}_{}_{}".format(self.learning_rate, self.momentum, self.hidden_size, self.activation_hidden,
+                                             self.activation_output, self.do_batch_norm, "{0:03d}".format(self.layers_number))
 
     # Return number of steps used
     def train_model(self, model, train_data, train_target, context):
@@ -115,11 +131,12 @@ class Solution():
         if key in self.sols and self.sols[key] == -1:
             return
         step = 0
+        loss = None
         # Put model in train mode
         model.train()
-        # optimizer = optim.SGD(model.parameters(), lr=self.learning_rate, momentum=self.momentum)
-        optimizer = optim.RMSprop(model.parameters(), lr=self.learning_rate, momentum=self.momentum,
-                                  alpha=0.99, weight_decay=0, eps=1e-08, centered=False)
+        optimizer = optim.SGD(model.parameters(), lr=self.learning_rate, momentum=self.momentum)
+        # optimizer = optim.RMSprop(model.parameters(), lr=self.learning_rate, momentum=self.momentum,
+        #                           alpha=0.99, weight_decay=0, eps=1e-08, centered=False)
         while True:
             time_left = context.get_timer().get_time_left()
             data = train_data
@@ -137,27 +154,39 @@ class Solution():
             if correct == total or time_left < 0.1 or (self.grid_search.enabled and step > 100):
                 if not key in self.sols:
                     self.sols[key] = 0
-                    self.solsSum[key] = 0
+                    self.worst_prediction[key] = correct / total
+                    self.worst_loss[key] = loss.item()
+                    self.worst_time_left[key] = time_left
+                    self.worst_steps[key] = step + 1
                 self.sols[key] += 1
-                self.solsSum[key] += step
+                self.worst_prediction[key] = min(self.worst_prediction[key], correct / total)
+                self.worst_loss[key] = max(self.worst_loss[key], loss.item())
+                self.worst_time_left[key] = min(self.worst_time_left[key], time_left)
+                self.worst_steps[key] = max(self.worst_steps[key], step + 1)
                 if self.sols[key] == len(self.random_grid):
-                    print("{} {:.4f}".format(key, float(self.solsSum[key])/self.sols[key]))
+                    print("{}: Prediction = {:.4f}, Loss = {:.4f}, Time left = {:.4f}, Step = {}".format(
+                        key, self.worst_prediction[key], self.worst_loss[key], self.worst_time_left[key], self.worst_steps[key]))
                 break
             # calculate loss
             loss = model.calc_loss(output, target)
+            if not loss:
+                break
             self.grid_search.log_step_value('loss', loss.item(), step)
             # calculate deriviative of model.forward() and put it in model.parameters()...gradient
             loss.backward()
             # print progress of the learning
-            self.print_stats(key, step, loss, correct, total)
+            # self.print_stats(key, time_left, step, loss, correct, total)
             # update model: model.parameters() -= lr * gradient
             optimizer.step()
             step += 1
+        self.grid_search_counter += 1
+        print('{:>8} / {:>8}'.format(self.grid_search_counter, self.grid_search_size), end='\r')
         return step
     
-    def print_stats(self, key, step, loss, correct, total):
+    def print_stats(self, key, time_left, step, loss, correct, total):
         if step % 10 == 0:
-            print("{}:Step = {} Prediction = {}/{} Error = {}".format(key, step, correct, total, loss.item()))
+            print("{}: Time left = {:<4}, Step = {:>2}, Prediction = {}/{}, Loss = {}"
+                  .format(key, round(time_left, 2), step, correct, total, loss.item()))
 
 
 ###
