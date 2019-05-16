@@ -96,7 +96,7 @@ class Solution():
         # self.activation_output_grid = self.activations.keys()
         self.learning_rate = 0.003
         # self.learning_rate_grid = [0.002, 0.003, 0.004, 0.005, 0.006, 0.007, 0.008, 0.009, 0.01]
-        self.momentum = 1.  # 0.8
+        self.momentum = 0.7  # 0.8
         self.momentum_grid = [0.0, 0.3, 0.5, 0.6, 0.7, 0.8, 0.9, 1.0]
         self.random = 0
         self.random_grid = [_ for _ in range(10)]
@@ -142,9 +142,6 @@ class Solution():
                 self.solsSum[key] += step
                 if self.sols[key] == len(self.random_grid):
                     print("{} {:.4f}".format(key, float(self.solsSum[key])/self.sols[key]))
-                    print('solsSum: ', self.solsSum[key])
-                    print('sols   : ', self.sols[key])
-                    print('-----------------')
                 break
             # calculate loss
             loss = model.calc_loss(output, target)
@@ -152,15 +149,16 @@ class Solution():
             # calculate deriviative of model.forward() and put it in model.parameters()...gradient
             loss.backward()
             # print progress of the learning
-            # self.print_stats(step, loss, correct, total)
+            self.print_stats(key, step, loss, correct, total)
             # update model: model.parameters() -= lr * gradient
             optimizer.step()
             step += 1
         return step
     
-    def print_stats(self, step, loss, correct, total):
-        if step % 100 == 0:
-            print("Step = {} Prediction = {}/{} Error = {}".format(step, correct, total, loss.item()))
+    def print_stats(self, key, step, loss, correct, total):
+        if step % 10 == 0:
+            print("{}:Step = {} Prediction = {}/{} Error = {}".format(key, step, correct, total, loss.item()))
+
 
 ###
 ###
