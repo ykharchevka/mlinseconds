@@ -1,21 +1,3 @@
-'''
-No 10 steps condition for the task
-TODOs:
-0. What are the fastest activations -> TBD, loss -> TBD and optim -> probably SGD?
-1. + Binary_cross_entropy vs BCEloss -> same
-2. + BatchNorm1d + track running stats = False
-3. + relu vs relu6
-4. + relu vs prelu
-5. inputs normalization: [0, 1] ->> [-0.5, 0.5] or [-4.5, 4.5]
-6. use model averaging to improve the accuracy
- - so instead of one [24, 24, 24] network I created an architecture
- of three different [24, 24, 24] chains of hidden layers
- combined with a [72, 1] layer on top
-7. use bilinear layers to get feature crosses (not helped with generalCpu)
- - mistake was doing this as one of the last steps, not one of the first steps
- - could've saved a lot of grid search time
-8. https://www.youtube.com/watch?v=BOCLq2gpcGU&list=PLkDaE6sCZn6Hn0vK8co82zjQtt3T2Nkqc&index=8
-'''
 # There are random function from 8 inputs and X random inputs added.
 # We split data in 2 parts, on first part you will train and on second
 # part we will test
@@ -80,6 +62,13 @@ class SolutionModel(nn.Module):
 
 class Solution():
     def __init__(self):
+        """
+        TODOs:
+        1. normalize input and target from 0...1 to -1...1
+        2. 
+        X. https://www.youtube.com/watch?v=BOCLq2gpcGU&list=PLkDaE6sCZn6Hn0vK8co82zjQtt3T2Nkqc&index=8
+
+        """
         self = self
         self.sols = {}
         self.worst_loss = {}
@@ -89,6 +78,7 @@ class Solution():
         self.best_step = 1000
         self.activations = {
             'sigmoid': nn.Sigmoid(),
+            'tanh': nn.Tanh(),
             'relu': nn.ReLU(),
             'rrelu0103': nn.RReLU(0.1, 0.3),
             'relu6': nn.ReLU6(),
@@ -98,17 +88,17 @@ class Solution():
             'leakyrelu01': nn.LeakyReLU(0.1)
         }
         self.layers_number = 3
-        self.layers_number_grid = [2, 3, 5, 6, 10]
+        self.layers_number_grid = [2, 3, 4]
         self.hidden_size = 50
-        self.hidden_size_grid = [10, 20, 30, 50]
+        self.hidden_size_grid = [40, 50, 60]
         self.do_batch_norm = True
-        self.do_batch_norm_grid = [False, True]
-        self.activation_hidden = 'relu'
-        self.activation_hidden_grid = self.activations.keys()
+        # self.do_batch_norm_grid = [False, True]
+        self.activation_hidden = 'tanh'
+        self.activation_hidden_grid = ['tanh']
         self.activation_output = 'sigmoid'
         # self.activation_output_grid = self.activations.keys()
-        self.learning_rate = 0.003
-        self.learning_rate_grid = [0.0001, 0.001, 0.01, 0.1]
+        self.learning_rate = 0.001
+        self.learning_rate_grid = [0.001]
         self.momentum = 0.  # 0.8
         # self.momentum_grid = [0.0, 0.3, 0.5, 0.6, 0.7, 0.8, 0.9, 1.0]
         self.random = 0
@@ -134,9 +124,9 @@ class Solution():
         loss = None
         # Put model in train mode
         model.train()
-        optimizer = optim.SGD(model.parameters(), lr=self.learning_rate, momentum=self.momentum)
-        # optimizer = optim.RMSprop(model.parameters(), lr=self.learning_rate, momentum=self.momentum,
-        #                           alpha=0.99, weight_decay=0, eps=1e-08, centered=False)
+        # optimizer = optim.SGD(model.parameters(), lr=self.learning_rate, momentum=self.momentum)
+        optimizer = optim.RMSprop(model.parameters(), lr=self.learning_rate, momentum=self.momentum,
+                                  alpha=0.99, weight_decay=0, eps=1e-08, centered=False)
         while True:
             time_left = context.get_timer().get_time_left()
             data = train_data
@@ -151,7 +141,7 @@ class Solution():
             correct = predict.eq(target.view_as(predict)).long().sum().item()
             # Total number of needed predictions
             total = predict.view(-1).size(0)
-            if correct == total or time_left < 0.1 or (self.grid_search.enabled and step > 100):
+            if correct == total or time_left < 0.1 or (self.grid_search.enabled and step > 1000):
                 if not key in self.sols:
                     self.sols[key] = 0
                     self.worst_prediction[key] = correct / total
@@ -196,7 +186,7 @@ class Solution():
 ###
 class Limits:
     def __init__(self):
-        self.time_limit = 2.0
+        self.time_limit = 10.0 # 2.0  # TODO: !!!!! change back
         self.size_limit = 1_000_000
         self.test_limit = 1.0
 

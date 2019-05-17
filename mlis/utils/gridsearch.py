@@ -7,6 +7,11 @@ class GridSearch():
     GRID_VALUE_SEPARATOR = '-'
 
     def __init__(self, solution, randomSearch = True):
+        import platform
+        if platform.system() == 'Windows':
+            import win32file  # pip install pypiwin32
+            win32file._setmaxstdio(8_192)
+
         self.solution = solution
         self.solution.__grid_search__ = self
         self.randomSearch = randomSearch
