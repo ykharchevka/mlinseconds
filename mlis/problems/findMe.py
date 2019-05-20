@@ -72,7 +72,7 @@ class SolutionModel(nn.Module):
 Work log:
 1. Walked through the dataset generation trying to explain the logic behind it to myself
 2. Applied all solutions known from generalCpu.
-3. Applied noise reduction provided by Roman and tuned a bit:
+3. Applied noise reduction provided by Roman and modified it a bit at own taste:
    + gathering worst prediction, loss, time left and steps among 10 random launches for each hparams combination.
    + printing them out sorted by BCE loss descending.
    + added a fancy progress counter that prints current experiment id and overall experiments quantity of grid search being run.
