@@ -7,10 +7,14 @@
 """
 TODOs:
 1. Add mini batches: https://github.com/romankoshlyak/mlinseconds/commit/c714cce1a90c2578e9da888157e70be3463b4b79?fbclid=IwAR1qgBh_VAZFsfxL7IYJkLLr4jVFE85R90lPre0floK_kw1_DYJ3I_cMZB4
-   ( https://www.youtube.com/watch?v=4qJaSmvhxi8 )
-2. Reducing network size in case of overfitting could help
-3. Maybe add "x = (x - 0.5)*9" to forward def beginning. Hint: we are not obliged to normalize targets same way as we normalize inputs!
-4. https://www.youtube.com/watch?v=QrzApibhohY&list=PLkDaE6sCZn6Hn0vK8co82zjQtt3T2Nkqc&index=13
+   ( https://www.youtube.com/watch?v=4qJaSmvhxi8 ).
+2. Reducing network size in case of overfitting could help.
+3. To pass all test cases only mini-batch gradient descent technic helped (especially with case 10).
+   But it was fast enough only in combination with error estimation across mini-batches of training examples.
+   Also it's important to use a proper batch size. Tried all recommended values like 32, 64, 128, 256.
+   https://github.com/svoit/mlinseconds/commit/edc2dffa62ed74320c9d7c970e38c2764553b602?fbclid=IwAR1nu0frwNFeY9xCkkMeq6uxpHEF_yOzm3PI6peR1X-h15kAjxFT0T32i9U
+4. Maybe add "x = (x - 0.5)*9" to forward def beginning. Hint: we are not obliged to normalize targets same way as we normalize inputs!
+5. https://www.youtube.com/watch?v=QrzApibhohY&list=PLkDaE6sCZn6Hn0vK8co82zjQtt3T2Nkqc&index=13
 """
 import time
 import random
