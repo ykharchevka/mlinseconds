@@ -9,7 +9,7 @@ TODOs:
 1. Add mini batches: https://github.com/romankoshlyak/mlinseconds/commit/c714cce1a90c2578e9da888157e70be3463b4b79?fbclid=IwAR1qgBh_VAZFsfxL7IYJkLLr4jVFE85R90lPre0floK_kw1_DYJ3I_cMZB4
    ( https://www.youtube.com/watch?v=4qJaSmvhxi8 )
 2. Reducing network size in case of overfitting could help
-3. Maybe add "x = (x - 0.5)*9" to forward def beginning
+3. Maybe add "x = (x - 0.5)*9" to forward def beginning. Hint: we are not obliged to normalize targets same way as we normalize inputs!
 4. https://www.youtube.com/watch?v=QrzApibhohY&list=PLkDaE6sCZn6Hn0vK8co82zjQtt3T2Nkqc&index=13
 """
 import time
