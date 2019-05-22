@@ -16,7 +16,8 @@ TODOs:
    Also it's important to use a proper batch size. Tried all recommended values like 32, 64, 128, 256.
    https://github.com/svoit/mlinseconds/commit/edc2dffa62ed74320c9d7c970e38c2764553b602?fbclid=IwAR1nu0frwNFeY9xCkkMeq6uxpHEF_yOzm3PI6peR1X-h15kAjxFT0T32i9U
 4. Maybe add "x = (x - 0.5)*9" to forward def beginning. Hint: we are not obliged to normalize targets same way as we normalize inputs!
-5. https://www.youtube.com/watch?v=QrzApibhohY&list=PLkDaE6sCZn6Hn0vK8co82zjQtt3T2Nkqc&index=13
+5. 
+X. https://www.youtube.com/watch?v=QrzApibhohY&list=PLkDaE6sCZn6Hn0vK8co82zjQtt3T2Nkqc&index=13
 """
 import time
 import random
@@ -108,17 +109,17 @@ class Solution():
             'leakyrelu01': nn.LeakyReLU(0.1)
         }
         self.layers_number = 2
-        self.layers_number_grid = [2, 3]
-        self.hidden_size = 80
-        self.hidden_size_grid = [60, 70, 80, 100]
-        self.batch_size = 512
-        self.batch_size_grid = [16, 128, 512]
-        self.batch_loss = 1e-7
-        self.batch_loss_grid = [1e-9, 1e-5, 0.1, 0.3]
-        self.learning_rate = 0.001
-        self.learning_rate_grid = [0.0005, 0.001, 0.01]
+        self.layers_number_grid = [2, 3, 4, 5]
+        self.hidden_size = 101
+        self.hidden_size_grid = [50, 100, 150, 200]
+        self.batch_size = 128
+        self.batch_size_grid = [64, 128, 256]
+        self.batch_loss = 0.3
+        self.batch_loss_grid = [0.3]
+        self.learning_rate = 0.01
+        self.learning_rate_grid = [0.01, 0.05, 0.1]
         self.momentum = 0.9  # 0.8
-        self.momentum_grid = [0.8, 0.9]
+        self.momentum_grid = [0.9]
         self.weight_decay = 0.
         self.weight_decay_grid = [0.0]
         self.do_batch_norm = True
