@@ -6,6 +6,8 @@
 # part we will test
 """
 TODOs:
+0. try adam while tuning lr -> beta=0.9+hidden_units+mini_batch_size -> layers+learning_rate_decay
+0. look at laptop + try sgd with momentum
 1. Add mini batches: https://github.com/romankoshlyak/mlinseconds/commit/c714cce1a90c2578e9da888157e70be3463b4b79?fbclid=IwAR1qgBh_VAZFsfxL7IYJkLLr4jVFE85R90lPre0floK_kw1_DYJ3I_cMZB4
    ( https://www.youtube.com/watch?v=4qJaSmvhxi8 ).
    - As far as I understood: we would better learn not on the whole train subset each step at once, but focusing at those parts of
@@ -16,7 +18,11 @@ TODOs:
    Also it's important to use a proper batch size. Tried all recommended values like 32, 64, 128, 256.
    https://github.com/svoit/mlinseconds/commit/edc2dffa62ed74320c9d7c970e38c2764553b602?fbclid=IwAR1nu0frwNFeY9xCkkMeq6uxpHEF_yOzm3PI6peR1X-h15kAjxFT0T32i9U
 4. Maybe add "x = (x - 0.5)*9" to forward def beginning. Hint: we are not obliged to normalize targets same way as we normalize inputs!
-5. 
+5. implement random search within the given range
+6. use log scale for lr random search: r = -4 * np.random.rand(); alpha = 10**r; beta: similar as for alpha, but (1- beta)
+7. cavier approach: run multiple instances on different pcs to speedup hparams search
+8. https://www.youtube.com/watch?v=5qefnAek8OA&list=PLkDaE6sCZn6Hn0vK8co82zjQtt3T2Nkqc&index=30
+9. batch norm at test, softmax regression and classification; local optima
 X. https://www.youtube.com/watch?v=QrzApibhohY&list=PLkDaE6sCZn6Hn0vK8co82zjQtt3T2Nkqc&index=13
 """
 import time
