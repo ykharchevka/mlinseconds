@@ -18,12 +18,18 @@ TODOs:
    Also it's important to use a proper batch size. Tried all recommended values like 32, 64, 128, 256.
    https://github.com/svoit/mlinseconds/commit/edc2dffa62ed74320c9d7c970e38c2764553b602?fbclid=IwAR1nu0frwNFeY9xCkkMeq6uxpHEF_yOzm3PI6peR1X-h15kAjxFT0T32i9U
 4. Maybe add "x = (x - 0.5)*9" to forward def beginning. Hint: we are not obliged to normalize targets same way as we normalize inputs!
+<<<<<<< HEAD
 5. implement random search within the given range
 6. use log scale for lr random search: r = -4 * np.random.rand(); alpha = 10**r; beta: similar as for alpha, but (1- beta)
 7. cavier approach: run multiple instances on different pcs to speedup hparams search
 8. https://www.youtube.com/watch?v=5qefnAek8OA&list=PLkDaE6sCZn6Hn0vK8co82zjQtt3T2Nkqc&index=30
 9. batch norm at test, softmax regression and classification; local optima
 X. https://www.youtube.com/watch?v=QrzApibhohY&list=PLkDaE6sCZn6Hn0vK8co82zjQtt3T2Nkqc&index=13
+
+Takeaways:
+1. Doing grid search you would better always modify all parameters at once, otherwise you are risking to stick to some locally optimal
+   value and clamp it by some other parameter. Each further attempt to improve the system by tuning other parameres will just clamp
+   the system to that local minimum even more.
 """
 import time
 import random
@@ -115,19 +121,19 @@ class Solution():
             'leakyrelu01': nn.LeakyReLU(0.1)
         }
         self.layers_number = 2
-        self.layers_number_grid = [2, 3, 4, 5]
-        self.hidden_size = 101
-        self.hidden_size_grid = [50, 100, 150, 200]
-        self.batch_size = 128
-        self.batch_size_grid = [64, 128, 256]
-        self.batch_loss = 0.3
-        self.batch_loss_grid = [0.3]
+        self.layers_number_grid = [2]
+        self.hidden_size = 130
+        self.hidden_size_grid = [i for i in range(40, 100)]
+        self.batch_size = 1024  # too small == lose speedup from vectorization; too big == too long per iteration for large datasets
+        self.batch_size_grid = [1024]
+        self.batch_loss = 3e-1
+        self.batch_loss_grid = [3e-1]
         self.learning_rate = 0.01
-        self.learning_rate_grid = [0.01, 0.05, 0.1]
+        self.learning_rate_grid = [0.01]
         self.momentum = 0.9  # 0.8
         self.momentum_grid = [0.9]
         self.weight_decay = 0.
-        self.weight_decay_grid = [0.0]
+        self.weight_decay_grid = [0.]
         self.do_batch_norm = True
         # self.do_batch_norm_grid = [False, True]
         self.activation_hidden = 'relu'  # 'tanh'
@@ -149,8 +155,8 @@ class Solution():
         return SolutionModel(input_size, output_size, self)
 
     def get_key(self):
-        return "hL{0:02d}_hs{1:04d}_bs{2:03d}_lr{3:.4f}_mm{4:.2f}".format(
-            self.layers_number, self.hidden_size, self.batch_size, self.learning_rate, self.momentum)
+        return "hL{0:02d}_hs{1:04d}_bs{2:03d}_bL{3:.2e}_lr{4:.6f}_mm{5:.2f}".format(
+            self.layers_number, self.hidden_size, self.batch_size, self.batch_loss, self.learning_rate, self.momentum)
 
     # Return number of steps used
     def train_model(self, model, train_data, train_target, context):
