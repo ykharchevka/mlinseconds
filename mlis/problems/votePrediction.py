@@ -197,9 +197,13 @@ class Solution():
                     loss = model.calc_loss(test_output, test_target)
                     self.save_experiment_summary(key, test_correct, test_total, loss, time_left, step, True)
                     break
+            # calculate loss
             loss = model.calc_loss(output, target)
-            self.grid_search.log_step_value('loss', loss.item(), step)
+            # calculate deriviative of model.forward() and put it in model.parameters()...gradient
             loss.backward()
+            # print progress of the learning
+            self.grid_search.log_step_value('loss', loss.item(), step)
+            # update model: model.parameters() -= lr * gradient
             optimizer.step()
             step += 1
         if self.grid_search.enabled:
