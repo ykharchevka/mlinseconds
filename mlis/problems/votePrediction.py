@@ -14,8 +14,6 @@ from ..utils.gridsearch import GridSearch
 class SolutionModel(nn.Module):
     def __init__(self, input_size, output_size, solution):
         super(SolutionModel, self).__init__()
-        self.input_size = input_size
-        self.output_size = output_size
         self.solution = solution
 
         # different seed for removing noise
@@ -48,8 +46,8 @@ class SolutionModel(nn.Module):
         return x
 
     def calc_loss(self, output, target):
-        loss_fn = nn.BCELoss()
-        loss = loss_fn(output, target)
+        bce_loss = nn.BCELoss()
+        loss = bce_loss(output, target)
         return loss
 
     def calc_predict(self, output):
@@ -154,6 +152,7 @@ class Solution():
         if key in self.sols and self.sols[key] == -1:
             return
         step = 0
+        # Put model in train mode
         model.train()
         batches = int(train_data.size(0) / self.batch_size)
 
@@ -174,6 +173,7 @@ class Solution():
             data = train_data[start_ind:end_ind]
             target = train_target[start_ind:end_ind]
             time_left = context.get_timer().get_time_left()
+            # No more time left, stop training
             if time_left < 0.1:
                 output = model(data)
                 predict = model.calc_predict(output)
@@ -182,10 +182,15 @@ class Solution():
                 loss = model.calc_loss(output, target)
                 self.save_experiment_summary(key, correct, total, loss, time_left, step, False)
                 break
+            # model.parameters()...gradient set to zero
             optimizer.zero_grad()
+            # evaluate model => model.forward(data)
             output = model(data)
+            # if x < 0.5 predict 0 else predict 1
             predict = model.calc_predict(output)
+            # Number of correct predictions
             correct = predict.eq(target.view_as(predict)).long().sum().item()
+            # Total number of needed predictions
             total = predict.view(-1).size(0)
             if correct == total:
                 model.eval()
@@ -202,6 +207,7 @@ class Solution():
             # calculate deriviative of model.forward() and put it in model.parameters()...gradient
             loss.backward()
             # print progress of the learning
+            # self.print_stats(step, loss, correct, total)
             self.grid_search.log_step_value('loss', loss.item(), step)
             # update model: model.parameters() -= lr * gradient
             optimizer.step()
@@ -227,6 +233,7 @@ class Limits:
         self.size_limit = 1000000
         self.test_limit = 1.0
 
+
 class DataProvider:
     def __init__(self):
         self.number_of_cases = 10
@@ -234,14 +241,14 @@ class DataProvider:
     def get_index(self, tensor_index):
         index = 0
         for i in range(tensor_index.size(0)):
-            index = 2*index + tensor_index[i].item()
+            index = 2 * index + tensor_index[i].item()
         return index
 
     def calc_value(self, input_data, function_table, input_size, input_count_size):
         count = 0
         for i in range(input_count_size):
-            count += function_table[self.get_index(input_data[i*input_size: (i+1)*input_size])].item()
-        if count > input_count_size/2:
+            count += function_table[self.get_index(input_data[i * input_size: (i + 1) * input_size])].item()
+        if count > input_count_size / 2:
             return 1
         else:
             return 0
@@ -250,7 +257,7 @@ class DataProvider:
         torch.manual_seed(seed)
         function_size = 1 << input_size
         function_table = torch.ByteTensor(function_size).random_(0, 2)
-        total_input_size = input_size*input_count_size
+        total_input_size = input_size * input_count_size
         data = torch.ByteTensor(data_size, total_input_size).random_(0, 2)
         target = torch.ByteTensor(data_size)
         for i in range(data_size):
@@ -259,11 +266,14 @@ class DataProvider:
 
     def create_case_data(self, case):
         input_size = 8
-        data_size = (1<<input_size)*32
+        data_size = (1 << input_size) * 32
         input_count_size = case
 
-        data, target = self.create_data(2*data_size, input_size, input_count_size, case)
-        return sm.CaseData(case, Limits(), (data[:data_size], target[:data_size]), (data[data_size:], target[data_size:])).set_description("{} inputs per voter and {} voters".format(input_size, input_count_size))
+        data, target = self.create_data(2 * data_size, input_size, input_count_size, case)
+        return sm.CaseData(case, Limits(), (data[:data_size], target[:data_size]),
+                           (data[data_size:], target[data_size:])).set_description(
+            "{} inputs per voter and {} voters".format(input_size, input_count_size))
+
 
 class Config:
     def __init__(self):
@@ -274,6 +284,7 @@ class Config:
 
     def get_solution(self):
         return Solution()
+
 
 # If you want to run specific case, put number here
 sm.SolutionManager(Config()).run(case_number=-1)
