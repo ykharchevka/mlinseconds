@@ -9,6 +9,33 @@
 _____________________
 0. https://github.com/romankoshlyak/mlinseconds/commit/564113a7bc7f05fb286d77dbdf38ad387732c4c5
  - Solution: check out BatchInitialization and Debug. BatchInit - batch normalization but from init point of view
+____________________________________________________________________________________________________
+0. https://gist.github.com/SergiiKashubin/79d5b1576df11642103d671f3a0dda1d/revisions
+
+1. I tried to convert the input data into "number of times each feature was 1 for a voter" with one-hot encoding, e.g. if a voters are [001, 101, 000] than feature times would be [1, 0, 2] and network  input would be [010 100 001]. But processing the data was taking too much time for that and I couldn't learn anything useful in a time limit
+
+2. I used a network from findMe as a predictor for a single voter and combined the results as a simple sum + bias -> sigmoid. My idea behind this was that the network output should not change if the voters in the input are permuted. I've also added minibatch on top which helped immediately and the model started working on first 2-3 tests.
+
+3. At this point I was passing a few first tests and others were ~7-8k correct on test. I spend a lot of hours on hyperparameter tuning, trying to reduce the size of the network, change activation functions and numbers of layers, add weight initialization, look at the distibution of the learned weights and initialize to the similar distribution, add schedulers for the learning rate, I was stuck and asked a hint.
+
+4. A hint was to use .view method for optimizing the speed. I used .view and .narrow where possible instead of copying around parts of the data, this helped but was not sufficient.
+
+5. I noticed that while creating the model I used dict {'prelu' : nn.PReLU(), 'tanh' : nn.Tanh()} etc. to choose activation functions in grid search and thus I was using the same nn.PReLU() object for all layers, meaning it has only one parameter to learn instead of num_layers. Changed that and it helped a bit.
+
+6. I realized that my model can be expressed in terms of a convolutional neural network, so I used Conv layers and that gave significant speedup over manual looping through the voters. After this I was reproducibly passing 8 tests.
+
+7. I tried decreasing the learning rate when loss is small to prevent overjumping , which helped a little bit.
+
+8. Finally I changed RMSprop to SGD and re-tuned the learning rate, momentum and weight decay. This made it - the model started to learn fast enough to get to 10 tests passed.
+
+The biggest annoyance was the automatic CPU throttling on my laptop - sometimes a test run for 300 steps in 2s and sometimes for 100, the changes becoming more erratic with overheated CPU. This was throwing all tuning through the window sometimes - when different runs of the same test had 5x difference in steps on the same parameters.
+
+Key Takeaways:
+1. Built-in methods are probably vectorized better than naive manual solutions (kinda obvious).
+2. SGD can be much faster than more sophisticated methods if tuned.
+3. Knowing PyTorch library details helps in optimizations.
+4. Grid search won't give you huge improvements in performance - it is worth looking for something else to change, more fundamental than just hyperparams.
+Roman: your 6 - this what view hint was for, replace loop with view
  _____________________
 0. try adam while tuning lr -> beta=0.9+hidden_units+mini_batch_size -> layers+learning_rate_decay
 0. look at laptop + try sgd with momentum
@@ -215,4 +242,4 @@ class Config:
 
 
 # If you want to run specific case, put number here
-sm.SolutionManager(Config()).run(case_number=-1)
+sm.SolutionManager(Config()).run(case_number=10)
