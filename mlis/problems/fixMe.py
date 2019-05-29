@@ -6,6 +6,10 @@
 # You can not simple fix mistake, you can change only activation function at this point
 
 '''
+https://www.youtube.com/watch?v=tNIpEZLv_eg
+https://www.youtube.com/watch?v=em6dfRxYkYU
+https://www.youtube.com/watch?v=nUUqwaxLnWs
+https://www.youtube.com/watch?v=5qefnAek8OA
 _____________________
 0. https://github.com/romankoshlyak/mlinseconds/commit/564113a7bc7f05fb286d77dbdf38ad387732c4c5
  - Solution: check out BatchInitialization and Debug. BatchInit - batch normalization but from init point of view
@@ -146,6 +150,7 @@ class Solution():
         for i in range(ind_size + 1):
             x = torch.FloatTensor(ind_size).uniform_(-10, 10)
             same = MyActivation.apply(x)[:i] == MyActivation.apply(x)[:i]
+            print(same)
             assert same.long().sum() == i, "Independent function only"
 
     # Return number of steps used
