@@ -61,6 +61,7 @@ Roman: your 6 - this what view hint was for, replace loop with view
 X. https://www.youtube.com/watch?v=QrzApibhohY&list=PLkDaE6sCZn6Hn0vK8co82zjQtt3T2Nkqc&index=13
 '''
 
+import sys
 import math
 import time
 import random
@@ -72,6 +73,13 @@ import torch.optim as optim
 from ..utils import solutionmanager as sm
 from ..utils import gridsearch as gs
 
+# python -m mlis.problems.fixMe 0.9,0.8,0.7,0.6,0.5,0.4,0.3,0.2 0.1,0.2,0.3,0.4,0.5,0.6,0.7,0.8
+sys.argv[1] = sys.argv[1].split(',')
+sys.argv[1] = [float(i) for i in sys.argv[1]]
+sys.argv[2] = sys.argv[2].split(',')
+sys.argv[2] = [float(i) for i in sys.argv[2]]
+print(len(sys.argv[1]), len(sys.argv[2]))
+layer_num = 0
 
 # Note: activation function should be element independent
 # See: check_independence method
@@ -79,6 +87,17 @@ class MyActivation(torch.autograd.Function):
     @staticmethod
     def forward(ctx, input):
         ctx.save_for_backward(input)
+        if input.numel() != 100:
+            global layer_num
+            layers = 8
+            gamma = sys.argv[1][layer_num]
+            betta = sys.argv[2][layer_num]
+            mu = input.sum().div(input.numel())
+            sigma_2 = input.add(-mu).pow(2).div(input.numel())
+            input = input.add(-mu).div(sigma_2.add(1e-7))
+            # input = input.mul(gammas[layer_num]).add(bettas[layer_num])
+            input = input.mul(gamma).add(betta)
+            layer_num = (layer_num + 1) if layer_num < layers - 1 else 0
         return input.clamp(min=0)
 
     @staticmethod
@@ -150,7 +169,6 @@ class Solution():
         for i in range(ind_size + 1):
             x = torch.FloatTensor(ind_size).uniform_(-10, 10)
             same = MyActivation.apply(x)[:i] == MyActivation.apply(x)[:i]
-            print(same)
             assert same.long().sum() == i, "Independent function only"
 
     # Return number of steps used
@@ -185,7 +203,7 @@ class Solution():
             # calculate deriviative of model.forward() and put it in model.parameters()...gradient
             loss.backward()
             # print progress of the learning
-            self.print_stats(step, loss, correct, total)
+            # self.print_stats(step, loss, correct, total)
             # update model: model.parameters() -= lr * gradient
             optimizer.step()
             step += 1
