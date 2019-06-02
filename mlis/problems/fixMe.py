@@ -78,7 +78,8 @@ sys.argv[1] = sys.argv[1].split(',')
 sys.argv[1] = [float(i) for i in sys.argv[1]]
 sys.argv[2] = sys.argv[2].split(',')
 sys.argv[2] = [float(i) for i in sys.argv[2]]
-print(len(sys.argv[1]), len(sys.argv[2]))
+sys.argv[3] = sys.argv[3].split(',')
+sys.argv[3] = [float(i) for i in sys.argv[3]]
 layer_num = 0
 
 # Note: activation function should be element independent
@@ -92,9 +93,10 @@ class MyActivation(torch.autograd.Function):
             layers = 8
             gamma = sys.argv[1][layer_num]
             betta = sys.argv[2][layer_num]
+            eps = sys.argv[3][layer_num]
             mu = input.sum().div(input.numel())
             sigma_2 = input.add(-mu).pow(2).div(input.numel())
-            input = input.add(-mu).div(sigma_2.add(1e-7))
+            input = input.add(-mu).div(sigma_2.add(eps))
             # input = input.mul(gammas[layer_num]).add(bettas[layer_num])
             input = input.mul(gamma).add(betta)
             layer_num = (layer_num + 1) if layer_num < layers - 1 else 0
