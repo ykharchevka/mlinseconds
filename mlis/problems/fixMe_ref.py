@@ -22,11 +22,12 @@ class MyActivation:
     @staticmethod
     def apply(x):
         global gamma, beta
+        x = x.clamp(min=0)
         mu = x.sum().div(x.numel())
         sigma_2 = x.add(-mu).pow(2).sum().div(x.numel())
         x = x.add(-mu).div(sigma_2.add(1e-310).pow(0.5))
         x = x.mul(gamma).add(beta)
-        return x.clamp(min=0)
+        return x
 
 ###
 ###
@@ -199,4 +200,4 @@ class Config:
 
 
 # If you want to run specific case, put number here
-sm.SolutionManager(Config()).run(case_number=-1)
+sm.SolutionManager(Config()).run(case_number=9)
