@@ -4,6 +4,7 @@
 # See "FIX ME"
 #
 # You can not simple fix mistake, you can change only activation function at this point
+import numpy as np
 import math
 import time
 import random
@@ -15,22 +16,17 @@ import torch.optim as optim
 from ..utils import solutionmanager as sm
 from ..utils import gridsearch as gs
 
-
 # Note: activation function should be element independent
 # See: check_independence method
-class MyActivation(torch.autograd.Function):
+class MyActivation:
     @staticmethod
-    def forward(ctx, input):
-        ctx.save_for_backward(input)
-        return input.clamp(min=0)
-
-    @staticmethod
-    def backward(ctx, grad_output):
-        input, = ctx.saved_tensors
-        grad_input = grad_output.clone()
-        grad_input[input < 0] = 0
-        return grad_input
-
+    def apply(x):
+        global gamma, beta
+        mu = x.sum().div(x.numel())
+        sigma_2 = x.add(-mu).pow(2).sum().div(x.numel())
+        x = x.add(-mu).div(sigma_2.add(1e-310).pow(0.5))
+        x = x.mul(gamma).add(beta)
+        return x.clamp(min=0)
 
 ###
 ###
@@ -40,6 +36,7 @@ class MyActivation(torch.autograd.Function):
 class SolutionModel(nn.Module):
     def __init__(self, input_size, output_size, solution):
         super(SolutionModel, self).__init__()
+        self.solution = solution
         self.do_norm = solution.do_norm
         layers_size = [input_size] + [solution.hidden_size] * solution.layers_number + [output_size]
         self.linears = nn.ModuleList([nn.Linear(a, b) for a, b in zip(layers_size, layers_size[1:])])
@@ -68,6 +65,13 @@ class SolutionModel(nn.Module):
 
 class Solution():
     def __init__(self):
+        self.gamma = 1.
+        self.gamma_grid = [1., 1., 1.]  # np.linspace(1.001, 1.001, 5)
+        self.beta = 0.
+        self.beta_grid = [0., 0., 0.]
+        global gamma, beta
+        gamma = self.gamma
+        beta = self.beta
         self.learning_rate = 0.05
         self.momentum = 0.8
         self.layers_number = 3
@@ -81,8 +85,10 @@ class Solution():
         # self.hidden_size_grid = [20, 30, 40]
         # self.do_norm_grid = [True, False]
         self.iter = 0
-        self.iter_number = 100
+        self.iter_number = 10  # 100
         self.grid_search = gs.GridSearch(self).set_enabled(False)
+        self.grid_search_counter = 0
+        self.grid_search_size = eval('*'.join([str(len(v)) for k, v in self.__dict__.items() if k.endswith('_grid')]))
 
     def create_model(self, input_size, output_size):
         return SolutionModel(input_size, output_size, self)
@@ -99,6 +105,7 @@ class Solution():
     def train_model(self, model, train_data, train_target, context):
         self.check_independence()
         step = 0
+        loss = 999.
         # Put model in train mode
         model.train()
         optimizer = optim.SGD(model.parameters(), lr=self.learning_rate, momentum=self.momentum)
@@ -127,14 +134,17 @@ class Solution():
             # calculate deriviative of model.forward() and put it in model.parameters()...gradient
             loss.backward()
             # print progress of the learning
-            self.print_stats(step, loss, correct, total)
+            # self.print_stats(step, loss, correct, total)
             # update model: model.parameters() -= lr * gradient
             optimizer.step()
             step += 1
         if self.grid_search.enabled:
-            self.grid_search.add_result('step', step)
+            # self.grid_search.add_result('step', step)
+            self.grid_search.add_result('loss', loss)
             if self.iter == self.iter_number - 1:
-                print(self.grid_search.choice_str, self.grid_search.get_stats('step'))
+                print(self.grid_search.choice_str, self.grid_search.get_stats('loss'))
+            self.grid_search_counter += 1
+            print('{:>8} / {:>8}'.format(self.grid_search_counter, self.grid_search_size * self.iter_number), end='\r')
         return step
 
     def print_stats(self, step, loss, correct, total):
