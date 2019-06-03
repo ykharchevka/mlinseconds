@@ -13,33 +13,44 @@
 # x0^x1
 # Hard function:
 # x2^x3^x4^x5^x6^x7
+
+# TODOs: 1. add random search instead of grid search; 2. think to apply PPO as another case of search as well
+
 import time
+import numpy as np
 import random
 import torch
-import torchvision
 import torch.nn as nn
-import torch.nn.functional as F
 import torch.optim as optim
 from ..utils import solutionmanager as sm
+from ..utils.gridsearch import GridSearch
 
 class SolutionModel(nn.Module):
-    def __init__(self, input_size, output_size):
+    def __init__(self, input_size, output_size, solution):
         super(SolutionModel, self).__init__()
-        self.input_size = input_size
         sm.SolutionManager.print_hint("Hint[1]: NN usually learn easiest function, you need to learn hard one")
-        self.hidden_size = 10
-        self.linear1 = nn.Linear(input_size, self.hidden_size)
-        self.linear2 = nn.Linear(self.hidden_size, output_size)
+
+        self.solution = solution
+        # different seed for removing noise
+        if solution.grid_search.enabled:
+            torch.manual_seed(solution.random)
+
+        nn_width_list = [input_size] + [solution.nn_width] * solution.nn_depth + [output_size]
+        self.layers = nn.ModuleList(nn.Linear(nn_width_list[i], nn_width_list[i + 1]) for i in range(len(nn_width_list) - 1))
+        self.batch_norms = nn.ModuleList(nn.BatchNorm1d(i, affine=False, track_running_stats=False) for i in nn_width_list[1:])
 
     def forward(self, x):
-        x = self.linear1(x)
-        x = torch.sigmoid(x)
-        x = self.linear2(x)
-        x = torch.sigmoid(x)
+        for i, layer in enumerate(self.layers):
+            x = layer(x)
+            if i + 1 < len(self.layers):
+                x = self.batch_norms[i](x)
+                x = self.solution.activations[self.solution.activations_hidden](x)
+        x = self.solution.activations[self.solution.activations_output](x)
         return x
 
     def calc_loss(self, output, target):
-        loss = ((output-target)**2).sum()
+        bce_loss = nn.BCELoss()
+        loss = bce_loss(output, target)
         return loss
 
     def calc_predict(self, output):
@@ -49,42 +60,139 @@ class SolutionModel(nn.Module):
 class Solution():
     def __init__(self):
         self = self
+        self.sols = {}
+        self.stats = {}
+        self.losses = {}
+        self.predictions = {}
+        self.time_lefts = {}
+        self.steps_walks = {}
+        self.is_tests = {}
+        self.activations = {
+            'sg': nn.Sigmoid(),
+            'th': nn.Tanh(),
+            'r0': nn.ReLU(),
+            'rr': nn.RReLU(0.1, 0.3),
+            'r6': nn.ReLU6(),
+            'pr': nn.PReLU(),
+            'el': nn.ELU(),  # Exponential Linear Unit
+            'sl': nn.SELU(),  # Self-Normalizing Neural Networks
+            'yr': nn.LeakyReLU(0.1)
+        }
+        self.activations_hidden = 'r0'
+        # self.activations_hidden_grid = ['r0']
+        self.activations_output = 'sg'
+        # self.activations_output_grid = ['sg']
+        self.nn_depth = 3
+        # self.nn_depth_grid = [1]
+        self.nn_width = 50
+        # self.nn_width_grid = [40]
+        self.learning_rate = 0.1
+        self.learning_rate_grid = [0.1]
+        self.momentum = 0.9
+        self.momentum_grid = [0.9]
+        self.random = 1
+        self.random_grid = [_ for _ in range(1, 11)]
+        self.best_step = 1000
+        self.grid_search = GridSearch(self)
+        self.grid_search.set_enabled(False)
+        self.grid_search_counter = 0
+        self.grid_search_size = eval('*'.join([str(len(v)) for k, v in self.__dict__.items() if k.endswith('_grid')]))
+
+    def __del__(self):
+        for item in sorted(self.stats.items(), key=lambda kv: kv[1][0]):
+            print(item[1][1])
+
+    def get_key(self):
+        return "d{0:02d}_w{1:04d}_lr{2:.6f}_mm{3:.6f}".format(self.nn_depth, self.nn_width, self.learning_rate, self.momentum)
+
+    def save_experiment_summary(self, key, correct, total, loss, time_left, step, is_test):
+        if not key in self.sols:
+            self.sols[key] = 0
+            self.predictions[key] = []
+            self.losses[key] = []
+            self.time_lefts[key] = []
+            self.steps_walks[key] = []
+            self.is_tests[key] = []
+        self.sols[key] += 1
+        self.predictions[key].append(correct / total)
+        self.losses[key].append(loss.item())
+        self.time_lefts[key].append(time_left)
+        self.steps_walks[key].append(step + 1)
+        self.is_tests[key].append(int(is_test))
+        if self.sols[key] == len(self.random_grid):
+            self.stats[key] = (
+                np.mean(self.losses[key]) + 10 * np.std(self.losses[key]), # criterion for sort
+                '{}: worst pred-n = {:.8f}, loss = {:.8f}+-{:.8f}, worst time left = {:.4f}, worst steps = {:>4}, isTest ratio = {}'
+                    .format(key, np.min(self.predictions[key]), np.mean(self.losses[key]), np.std(self.losses[key]),
+                            np.min(self.time_lefts[key]), np.max(self.steps_walks[key]),
+                            np.sum(self.is_tests[key]) / len(self.is_tests[key])
+                            )
+            )
 
     def create_model(self, input_size, output_size):
-        return SolutionModel(input_size, output_size)
+        return SolutionModel(input_size, output_size, self)
 
     # Return number of steps used
     def train_model(self, model, train_data, train_target, context):
-        step = 0
+        test_data = context.case_data.test_data[0]
+        test_target = context.case_data.test_data[1]
+
+        key = self.get_key()
+        if key in self.sols and self.sols[key] == -1:
+            return
+
         # Put model in train mode
         model.train()
+        optimizer = optim.SGD(model.parameters(), lr=self.learning_rate, momentum=self.momentum)
+        step = 0
         while True:
             time_left = context.get_timer().get_time_left()
             # No more time left, stop training
             if time_left < 0.1:
+                output = model(train_data)
+                predict = model.calc_predict(output)
+                correct = predict.eq(train_target.view_as(predict)).long().sum().item()
+                total = predict.view(-1).size(0)
+                loss = model.calc_loss(output, train_target)
+                self.save_experiment_summary(key, correct, total, loss, time_left, step, is_test=False)
                 break
-            optimizer = optim.SGD(model.parameters(), lr=0.1)
-            data = train_data
-            target = train_target
             # model.parameters()...gradient set to zero
             optimizer.zero_grad()
             # evaluate model => model.forward(data)
-            output = model(data)
+            output = model(train_data)
             # if x < 0.5 predict 0 else predict 1
             predict = model.calc_predict(output)
             # Number of correct predictions
-            correct = predict.eq(target.view_as(predict)).long().sum().item()
+            correct = predict.eq(train_target.view_as(predict)).long().sum().item()
             # Total number of needed predictions
             total = predict.view(-1).size(0)
+
+            if correct == total:
+                model.eval()
+                test_output = model(test_data)
+                test_predict = model.calc_predict(test_output)
+                test_correct = test_predict.eq(test_target.view_as(test_predict)).long().sum().item()
+                test_total = test_target.view(-1).size(0)
+                if test_correct == test_total:
+                    loss = model.calc_loss(test_output, test_target)
+                    self.save_experiment_summary(key, test_correct, test_total, loss, time_left, step, True)
+                    break
+
             # calculate loss
-            loss = model.calc_loss(output, target)
+            loss = model.calc_loss(output, train_target)
             # calculate deriviative of model.forward() and put it in model.parameters()...gradient
             loss.backward()
             # print progress of the learning
-            self.print_stats(step, loss, correct, total)
+            # self.print_stats(step, loss, correct, total)
+            self.grid_search.log_step_value('loss', loss.item(), step)
             # update model: model.parameters() -= lr * gradient
             optimizer.step()
             step += 1
+
+        if self.grid_search.enabled:
+            self.grid_search_counter += 1
+            print('{:>8} / {:>8}'.format(self.grid_search_counter, self.grid_search_size), end='\r')
+
         return step
 
     def print_stats(self, step, loss, correct, total):
@@ -178,4 +286,4 @@ class Config:
         return Solution()
 
 # If you want to run specific case, put number here
-sm.SolutionManager(Config()).run(case_number=-1)
+sm.SolutionManager(Config()).run(case_number=1)
