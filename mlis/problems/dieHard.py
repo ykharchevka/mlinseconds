@@ -21,6 +21,8 @@ import torch.nn as nn
 import torch.optim as optim
 from ..utils import solutionmanager as sm
 
+EASY = []
+
 class SolutionModel(nn.Module):
     def __init__(self, input_size, output_size, solution):
         super(SolutionModel, self).__init__()
@@ -82,56 +84,58 @@ class Solution():
         test_data = context.case_data.test_data[0]
         test_target = context.case_data.test_data[1]
 
-        easy_model = nn.Sequential(
-            nn.Linear(8, 32),
-            nn.BatchNorm1d(32, affine=False, track_running_stats=False),
-            nn.ReLU(),
-            nn.Linear(32, 32),
-            nn.BatchNorm1d(32, affine=False, track_running_stats=False),
-            nn.ReLU(),
-            nn.Linear(32, 1),
-            nn.Sigmoid(),
-        )
-        easy_model.train()
-        easy_optimizer = optim.SGD(easy_model.parameters(), lr=0.1, momentum=0.9)
-        while True:
-            easy_optimizer.zero_grad()
-            output = easy_model.forward(train_data)
-            predict = output.round()
-            correct = predict.eq(train_target.view_as(predict)).long().sum().item()
-            if correct / train_total >= 0.75:
-                print('Done training easy model')
-                easies = []
-                hards = []
-                for k, v in enumerate(zip(train_data, predict, train_target)):
-                    if v[1] != v[2]:
-                        hards.append(k)
-                    else:
-                        easies.append(k)
-                train_data_easy = train_data[easies, :]
-                train_target_easy = train_target[easies, :]
-                train_data_hard = train_data[hards, :]
-                train_target_hard = train_target[hards, :]
-                break
-            loss = bce_loss(output, train_target)
-            loss.backward()
-            easy_optimizer.step()
+        # easy_model = nn.Sequential(
+        #     nn.Linear(8, 32),
+        #     nn.BatchNorm1d(32, affine=False, track_running_stats=False),
+        #     nn.ReLU(),
+        #     nn.Linear(32, 32),
+        #     nn.BatchNorm1d(32, affine=False, track_running_stats=False),
+        #     nn.ReLU(),
+        #     nn.Linear(32, 1),
+        #     nn.Sigmoid(),
+        # )
+        # easy_model.train()
+        # easy_optimizer = optim.SGD(easy_model.parameters(), lr=0.1, momentum=0.9)
+        # while True:
+        #     easy_optimizer.zero_grad()
+        #     output = easy_model.forward(train_data)
+        #     predict = output.round()
+        #     correct = predict.eq(train_target.view_as(predict)).long().sum().item()
+        #     if correct / train_total >= 0.:
+        #         print('Done training easy model')
+        #         easies = []
+        #         hards = []
+        #         for k, v in enumerate(zip(train_data, predict, train_target)):
+        #             if v[1] != v[2]:
+        #                 hards.append(k)
+        #             else:
+        #                 easies.append(k)
+        #         train_data_easy = train_data[easies, :]
+        #         train_target_easy = train_target[easies, :]
+        #         train_data_hard = train_data[hards, :]
+        #         train_target_hard = train_target[hards, :]
+        #         break
+        #     loss = bce_loss(output, train_target)
+        #     loss.backward()
+        #     easy_optimizer.step()
+
+        hard_inds = []
+        count_easy = 0
+        for k, v in enumerate(train_data.type_as(EASY[0])):
+            is_easy = False
+            for i in EASY:
+                if torch.eq(v, i).all().item() == 1:
+                    is_easy = True
+                    count_easy += 1
+                    break
+            if not is_easy:
+                hard_inds.append(k)
+
+        train_data_hard = train_data[hard_inds, :]
+        train_target_hard = train_target[hard_inds, :]
 
         model.train()
         optimizer = optim.SGD(model.parameters(), lr=self.learning_rate, momentum=self.momentum)
-
-        while True:
-            optimizer.zero_grad()
-            train_output = model.forward(train_data_easy)
-            train_predict = train_output.round()
-            train_correct = train_predict.eq(train_target_easy.view_as(train_predict)).long().sum().item()
-            if train_correct / train_data_easy.size()[0] == 1.:
-                print('Done training core model on easy subset')
-                break
-            train_loss = bce_loss(train_output, train_target_easy)
-            train_loss.backward()
-            optimizer.step()
-
         step = train_correct = 0
         while True:
             time_left = context.get_timer().get_time_left()
@@ -148,8 +152,8 @@ class Solution():
             test_correct = test_predict.eq(test_target.view_as(test_predict)).long().sum().item()
             test_loss = bce_loss(test_output, test_target)
 
-            if step < 50:
-                print('{:>3}. Train_hard: {:>3}/{:>3}={:>8} < {:>8}; Test: {:>3}/{:>3}={:>8} < {:>8}'.format(
+            if step % 200 == 0:
+                print('{:>4}. Train_hard: {:>3}/{:>3}={:>8} < {:>8}; Test: {:>3}/{:>3}={:>8} < {:>8}'.format(
                     step,
                     train_correct, train_data_hard.size()[0], round(train_correct / train_data_hard.size()[0], 5), round(train_loss.item(), 5),
                     test_correct, test_data.size()[0], round(test_correct / test_data.size()[0], 5), round(test_loss.item(), 5))
@@ -212,6 +216,8 @@ class DataProvider:
             easy_value = easy_table[easy_ind].item()
             hard_value = hard_table[hard_ind].item()
             target[count, 0] = hard_value
+            if easy_value == hard_value and easy_correct and ind < 128:
+                EASY.append(data[count])
             if not easy_correct or easy_value == hard_value:
                 count += 1
         data = data[:count,:]
