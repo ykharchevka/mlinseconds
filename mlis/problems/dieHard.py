@@ -20,8 +20,8 @@ import torch
 import torch.nn as nn
 import torch.optim as optim
 from ..utils import solutionmanager as sm
+from ..utils.gridsearch import GridSearch
 
-EASY = []
 
 class SolutionModel(nn.Module):
     def __init__(self, input_size, output_size, solution):
@@ -29,7 +29,11 @@ class SolutionModel(nn.Module):
         # sm.SolutionManager.print_hint("Hint[1]: NN usually learn easiest function, you need to learn hard one")
         self.solution = solution
 
-        nn_width_list = [input_size] + [solution.nn_width] * solution.nn_depth + [output_size]
+        if solution.grid_search.enabled:
+            assert solution.iter >= 0
+            torch.manual_seed(solution.iter)
+
+        nn_width_list = [input_size] + [solution.nn_width_main] * solution.nn_depth_main + [output_size]
         self.layers = nn.ModuleList(nn.Linear(nn_width_list[i], nn_width_list[i + 1]) for i in range(len(nn_width_list) - 1))
         self.batch_norms = nn.ModuleList(nn.BatchNorm1d(i, affine=False, track_running_stats=False) for i in nn_width_list[1:])
 
@@ -52,6 +56,9 @@ class SolutionModel(nn.Module):
 class Solution():
     def __init__(self):
         self = self
+        self.sols = {}
+        self.stats = {}
+        self.predictions = {}
         self.activations = {
             'sg': nn.Sigmoid(),
             'th': nn.Tanh(),
@@ -65,78 +72,96 @@ class Solution():
         }
         self.activations_hidden = 'r0'
         self.activations_output = 'sg'
-        self.nn_depth = 3
-        self.nn_width = 32
-        self.learning_rate = 0.1
-        self.momentum = 0.9
+        self.nn_width_easy = 128
+        self.nn_width_easy_grid = [128]
+        self.learning_rate_easy = 0.1
+        self.learning_rate_easy_grid = [0.1]
+        self.momentum_easy = 0.9
+        self.momentum_easy_grid = [0.9]
+        self.nn_depth_main = 3
+        self.nn_depth_main_grid = [3]
+        self.nn_width_main = 32
+        self.nn_width_main_grid = [32]
+        self.learning_rate_main = 0.5
+        self.learning_rate_main_grid = [0.5]
+        self.momentum_main = 0.9
+        self.momentum_main_grid = [0.9]
+        self.iter = -1
+        self.iter_number = 20
+        self.grid_search = GridSearch(self)
+        self.grid_search.set_enabled(False)
+        self.grid_search_counter = 0
+        self.grid_search_size = eval(str(self.iter_number) + '*' + '*'.join([str(len(v)) for k, v in self.__dict__.items() if k.endswith('_grid')]))
+
+    def __del__(self):
+        for item in sorted(self.stats.items(), key=lambda kv: kv[1][0], reverse=True):
+            print(item[1][1])
 
     def create_model(self, input_size, output_size):
         return SolutionModel(input_size, output_size, self)
 
+    def get_key(self):
+        return "eW{:02d}_eL{:.8f}_eM{:02f}_mD{:02d}_mW{:02d}_mL{:.8f}_mM{:.2f}".format(
+            self.nn_width_easy, self.learning_rate_easy, self.momentum_easy, self.nn_depth_main, self.nn_width_main, self.learning_rate_main, self.momentum_main)
+
+    def save_experiment_summary(self, key, prediction):
+        if not key in self.sols:
+            self.sols[key] = 0
+            self.predictions[key] = []
+        self.sols[key] += 1
+        self.predictions[key].append(prediction)
+        if self.sols[key] == self.iter_number:
+            self.stats[key] = (
+                np.sum(prediction), '{}: predicted = {:.8f}+-{:.8f}'.format(
+                    key, np.mean(self.predictions[key]), np.std(self.predictions[key])))
+
     # Return number of steps used
     def train_model(self, model, train_data, train_target, context):
+        key = self.get_key()
+        if key in self.sols and self.sols[key] == -1:
+            return
         bce_loss = nn.BCELoss()
-        train_total = train_data.size()[0]
-        train_data_easy = torch.Tensor()
-        train_target_easy = torch.Tensor()
-        train_data_hard = torch.Tensor()
-        train_target_hard = torch.Tensor()
         test_data = context.case_data.test_data[0]
         test_target = context.case_data.test_data[1]
+        test_total = test_data.size()[0]
 
-        # easy_model = nn.Sequential(
-        #     nn.Linear(8, 32),
-        #     nn.BatchNorm1d(32, affine=False, track_running_stats=False),
-        #     nn.ReLU(),
-        #     nn.Linear(32, 32),
-        #     nn.BatchNorm1d(32, affine=False, track_running_stats=False),
-        #     nn.ReLU(),
-        #     nn.Linear(32, 1),
-        #     nn.Sigmoid(),
-        # )
-        # easy_model.train()
-        # easy_optimizer = optim.SGD(easy_model.parameters(), lr=0.1, momentum=0.9)
-        # while True:
-        #     easy_optimizer.zero_grad()
-        #     output = easy_model.forward(train_data)
-        #     predict = output.round()
-        #     correct = predict.eq(train_target.view_as(predict)).long().sum().item()
-        #     if correct / train_total >= 0.:
-        #         print('Done training easy model')
-        #         easies = []
-        #         hards = []
-        #         for k, v in enumerate(zip(train_data, predict, train_target)):
-        #             if v[1] != v[2]:
-        #                 hards.append(k)
-        #             else:
-        #                 easies.append(k)
-        #         train_data_easy = train_data[easies, :]
-        #         train_target_easy = train_target[easies, :]
-        #         train_data_hard = train_data[hards, :]
-        #         train_target_hard = train_target[hards, :]
-        #         break
-        #     loss = bce_loss(output, train_target)
-        #     loss.backward()
-        #     easy_optimizer.step()
+        easy_model = nn.Sequential(
+            nn.Linear(8, self.nn_width_easy),
+            nn.BatchNorm1d(self.nn_width_easy, affine=False, track_running_stats=False),
+            nn.ReLU(),
+            nn.Linear(self.nn_width_easy, 1),
+            nn.Sigmoid(),
+        )
 
-        hard_inds = []
-        count_easy = 0
-        for k, v in enumerate(train_data.type_as(EASY[0])):
-            is_easy = False
-            for i in EASY:
-                if torch.eq(v, i).all().item() == 1:
-                    is_easy = True
-                    count_easy += 1
-                    break
-            if not is_easy:
-                hard_inds.append(k)
+        data_batches = []
+        for col in range(8):
+            train_data_variation = train_data.clone()
+            train_data_variation[:, col] = train_data_variation[:, col].add(-1).abs()
+            data_batches.append(train_data_variation)
+        easy_model.train()
+        easy_optimizer = optim.SGD(easy_model.parameters(), lr=self.learning_rate_easy, momentum=self.momentum_easy)
+        easy_cols_search = [0] * 8
+        easy_step = 0
+        while True:
+            easy_optimizer.zero_grad()
+            easy_output = easy_model.forward(data_batches[easy_step % 8])
+            easy_predict = easy_output.round()
+            easy_correct = easy_predict.eq(train_target.view_as(easy_predict)).long().sum().item()
+            easy_loss = bce_loss(easy_output, train_target)
+            easy_loss.backward()
+            easy_optimizer.step()
+            easy_cols_search[easy_step % 8] = easy_correct
+            easy_step += 1
+            if easy_step > 32:
+                break
 
-        train_data_hard = train_data[hard_inds, :]
-        train_target_hard = train_target[hard_inds, :]
+        train_data_hard = train_data.clone()
+        train_data_hard[:, [i[0] for i in sorted(enumerate(easy_cols_search), key=lambda v: v[1])[:2]]] = 0.
 
         model.train()
-        optimizer = optim.SGD(model.parameters(), lr=self.learning_rate, momentum=self.momentum)
-        step = train_correct = 0
+        optimizer = optim.SGD(model.parameters(), lr=self.learning_rate_main, momentum=self.momentum_main)
+        step = 0
+        test_predict_ratio = 0.
         while True:
             time_left = context.get_timer().get_time_left()
             if time_left < 0.1:
@@ -144,15 +169,18 @@ class Solution():
             optimizer.zero_grad()
             train_output = model.forward(train_data_hard)
             train_predict = train_output.round()
-            train_correct = train_predict.eq(train_target_hard.view_as(train_predict)).long().sum().item()
-            train_loss = bce_loss(train_output, train_target_hard)
+            train_correct = train_predict.eq(train_target.view_as(train_predict)).long().sum().item()
+            train_loss = bce_loss(train_output, train_target)
 
             test_output = model.forward(test_data)
             test_predict = test_output.round()
             test_correct = test_predict.eq(test_target.view_as(test_predict)).long().sum().item()
             test_loss = bce_loss(test_output, test_target)
+            test_predict_ratio = test_correct / test_total
+            if test_predict_ratio >= 0.75:
+                break
 
-            if step % 200 == 0:
+            if step % 200 == 0 and False:
                 print('{:>4}. Train_hard: {:>3}/{:>3}={:>8} < {:>8}; Test: {:>3}/{:>3}={:>8} < {:>8}'.format(
                     step,
                     train_correct, train_data_hard.size()[0], round(train_correct / train_data_hard.size()[0], 5), round(train_loss.item(), 5),
@@ -161,6 +189,10 @@ class Solution():
             train_loss.backward()
             optimizer.step()
             step += 1
+        if self.grid_search.enabled:
+            self.save_experiment_summary(key, test_predict_ratio)
+            self.grid_search_counter += 1
+            print('{:>8} / {:>8}'.format(self.grid_search_counter, self.grid_search_size), end='\r')
         return step
 
 
@@ -216,8 +248,6 @@ class DataProvider:
             easy_value = easy_table[easy_ind].item()
             hard_value = hard_table[hard_ind].item()
             target[count, 0] = hard_value
-            if easy_value == hard_value and easy_correct and ind < 128:
-                EASY.append(data[count])
             if not easy_correct or easy_value == hard_value:
                 count += 1
         data = data[:count,:]
@@ -253,4 +283,4 @@ class Config:
         return Solution()
 
 # If you want to run specific case, put number here
-sm.SolutionManager(Config()).run(case_number=1)
+sm.SolutionManager(Config()).run(case_number=-1)

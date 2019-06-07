@@ -95,9 +95,10 @@ class GridSearch():
                 choice_str, grid_choice = self.get_grid_choice(grid_attributes, grid_choice_history)
                 self.set_grid_choice(choice_str, grid_choice)
                 if hasattr(solution, 'iter_number'):
-                    for it in range(solution.iter_number):
+                    for it in range(1, solution.iter_number + 1):
                         solution.iter = it
                         case_data.manual_seed = it
+                        case_data.number = it
                         solution_manager.train_model(solution, case_data)
                 else:
                     solution_manager.train_model(solution, case_data)
