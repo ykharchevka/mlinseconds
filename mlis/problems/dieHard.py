@@ -177,7 +177,7 @@ class Solution():
             test_correct = test_predict.eq(test_target.view_as(test_predict)).long().sum().item()
             test_loss = bce_loss(test_output, test_target)
             test_predict_ratio = test_correct / test_total
-            if test_predict_ratio >= 0.75:
+            if test_predict_ratio >= 1.:
                 break
 
             if step % 200 == 0 and False:
