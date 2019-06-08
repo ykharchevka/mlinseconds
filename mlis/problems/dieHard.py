@@ -67,7 +67,7 @@ class Solution():
         self.stats = {}
         self.predictions = {}
         self.time_expenses = {}
-        self.best_solution = [0., '']
+        self.best_solution = [0., 0., 0., '']
         self.activations = {
             'sg': nn.Sigmoid(),
             'th': nn.Tanh(),
@@ -90,8 +90,8 @@ class Solution():
         self.nn_depth_main = 3
         self.nn_depth_main_grid = [3]
         self.nn_width_main = 16
-        self.nn_width_main_grid = [16]
-        self.learning_rate_main = 3.9732777829595727
+        self.nn_width_main_grid = [16, 20, 24, 32]
+        self.learning_rate_main = 6.1042008962633627
         self.learning_rate_main_grid = 10 ** np.random.uniform(np.log10(1e-5), np.log10(1e2), 500)
         self.momentum_main = 0.9
         self.momentum_main_grid = [0.9]
@@ -129,7 +129,7 @@ class Solution():
                 solution_score, '{}: predicted = {:.8f}+-{:.8f} within avg {:.8f}s'.format(
                     key, predictions_mean, np.std(self.predictions[key]), time_expenses_mean))
             if solution_score > self.best_solution[0]:
-                self.best_solution = [solution_score, key]
+                self.best_solution = [solution_score, predictions_mean, time_expenses_mean, key]
 
     # Return number of steps used
     def train_model(self, model, train_data, train_target, context):
@@ -207,8 +207,8 @@ class Solution():
         if self.grid_search.enabled:
             self.save_experiment_summary(key, test_predict_ratio, context.get_timer().get_execution_time())
             self.grid_search_counter += 1
-            print('{:>8} / {:>8}. So far achieved {:>20} score using {}'.format(
-                self.grid_search_counter, self.grid_search_size, self.best_solution[0], self.best_solution[1]), end='\r')
+            print('{:>8} / {:>8}. So far achieved {:>20} = {:.4f} / {:.4f} score using {}'.format(
+                self.grid_search_counter, self.grid_search_size, *self.best_solution), end='\r')
         return step
 
 
