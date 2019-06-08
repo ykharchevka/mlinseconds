@@ -38,6 +38,7 @@ class SolutionModel(nn.Module):
 
         if solution.grid_search.enabled:
             assert solution.iter >= 0
+            random.seed(solution.iter)
             torch.manual_seed(solution.iter)
 
         nn_width_list = [input_size] + [solution.nn_width_main] * solution.nn_depth_main + [output_size]
@@ -89,9 +90,9 @@ class Solution():
         self.momentum_easy_grid = [0.9]
         self.nn_depth_main = 3
         self.nn_depth_main_grid = [3]
-        self.nn_width_main = 16
+        self.nn_width_main = 20
         self.nn_width_main_grid = [16, 20, 24, 32]
-        self.learning_rate_main = 6.1042008962633627
+        self.learning_rate_main = 2.9851410212817240
         self.learning_rate_main_grid = 10 ** np.random.uniform(np.log10(1e-5), np.log10(1e2), 500)
         self.momentum_main = 0.9
         self.momentum_main_grid = [0.9]
@@ -123,13 +124,13 @@ class Solution():
         self.time_expenses[key].append(time_expense)
         if self.sols[key] == self.iter_number:
             predictions_mean = np.mean(self.predictions[key])
-            time_expenses_mean = np.mean(self.time_expenses[key])
-            solution_score = predictions_mean / time_expenses_mean
+            time_expenses_max = np.max(self.time_expenses[key])
+            solution_score = predictions_mean / time_expenses_max
             self.stats[key] = (
-                solution_score, '{}: predicted = {:.8f}+-{:.8f} within avg {:.8f}s'.format(
-                    key, predictions_mean, np.std(self.predictions[key]), time_expenses_mean))
+                solution_score, '{}: predicted = {:.8f}+-{:.8f} within {:.8f}s at worst'.format(
+                    key, predictions_mean, np.std(self.predictions[key]), time_expenses_max))
             if solution_score > self.best_solution[0]:
-                self.best_solution = [solution_score, predictions_mean, time_expenses_mean, key]
+                self.best_solution = [solution_score, predictions_mean, time_expenses_max, key]
 
     # Return number of steps used
     def train_model(self, model, train_data, train_target, context):
