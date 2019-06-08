@@ -89,13 +89,13 @@ class Solution():
         self.momentum_easy = 0.9
         self.momentum_easy_grid = [0.9]
         self.nn_depth_main = 3
-        self.nn_depth_main_grid = [3]
-        self.nn_width_main = 20
-        self.nn_width_main_grid = [16, 20, 24, 32]
-        self.learning_rate_main = 2.9851410212817240
+        self.nn_depth_main_grid = [2, 3, 4]
+        self.nn_width_main = 16
+        self.nn_width_main_grid = random.sample(range(8, 129), 50)
+        self.learning_rate_main = 1.9447023047250203
         self.learning_rate_main_grid = 10 ** np.random.uniform(np.log10(1e-5), np.log10(1e2), 500)
         self.momentum_main = 0.9
-        self.momentum_main_grid = [0.9]
+        self.momentum_main_grid = np.random.uniform(0.7, 0.99, 20)
         self.iter = -1
         self.iter_number = 20
         self.grid_search = GridSearch(self)
@@ -111,7 +111,7 @@ class Solution():
         return SolutionModel(input_size, output_size, self)
 
     def get_key(self):
-        return "eW{:02d}_eL{:.8f}_eM{:02f}_mD{:02d}_mW{:02d}_mL{:.16f}_mM{:.2f}".format(
+        return "eW{:02d}_eL{:.8f}_eM{:02f}_mD{:02d}_mW{:02d}_mL{:.16f}_mM{:.16f}".format(
             self.nn_width_easy, self.learning_rate_easy, self.momentum_easy, self.nn_depth_main, self.nn_width_main, self.learning_rate_main, self.momentum_main)
 
     def save_experiment_summary(self, key, prediction, time_expense):
