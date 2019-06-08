@@ -17,7 +17,8 @@
 added checking all test cases during grid search
 added showing best yet found solution
 using random generation of values in logarithmic scale to be checked by grid search for main ANN learning rate hyperparameter
-added grid search termination for the case when 100% accuracy solution is found
+added grid search termination for the case when 100% accuracy solution is found. Then removed it as it doesn't give 100% reproducability :)
+added solution score = mean_test_accuracy / mean_time_expenses, which is to be maximized during grid search
 """
 import time
 import numpy as np
@@ -65,6 +66,7 @@ class Solution():
         self.sols = {}
         self.stats = {}
         self.predictions = {}
+        self.time_expenses = {}
         self.best_solution = [0., '']
         self.activations = {
             'sg': nn.Sigmoid(),
@@ -87,12 +89,12 @@ class Solution():
         self.momentum_easy_grid = [0.9]
         self.nn_depth_main = 3
         self.nn_depth_main_grid = [3]
-        self.nn_width_main = 32
-        self.nn_width_main_grid = [16, 32, 64]
-        self.learning_rate_main = 0.5
-        self.learning_rate_main_grid = 10 ** np.random.uniform(np.log10(1e-5), np.log10(1e2), 50)
+        self.nn_width_main = 16
+        self.nn_width_main_grid = [16]
+        self.learning_rate_main = 3.9732777829595727
+        self.learning_rate_main_grid = 10 ** np.random.uniform(np.log10(1e-5), np.log10(1e2), 500)
         self.momentum_main = 0.9
-        self.momentum_main_grid = [0.7, 0.8, 0.9]
+        self.momentum_main_grid = [0.9]
         self.iter = -1
         self.iter_number = 20
         self.grid_search = GridSearch(self)
@@ -111,22 +113,23 @@ class Solution():
         return "eW{:02d}_eL{:.8f}_eM{:02f}_mD{:02d}_mW{:02d}_mL{:.16f}_mM{:.2f}".format(
             self.nn_width_easy, self.learning_rate_easy, self.momentum_easy, self.nn_depth_main, self.nn_width_main, self.learning_rate_main, self.momentum_main)
 
-    def save_experiment_summary(self, key, prediction):
+    def save_experiment_summary(self, key, prediction, time_expense):
         if not key in self.sols:
             self.sols[key] = 0
             self.predictions[key] = []
+            self.time_expenses[key] = []
         self.sols[key] += 1
         self.predictions[key].append(prediction)
+        self.time_expenses[key].append(time_expense)
         if self.sols[key] == self.iter_number:
             predictions_mean = np.mean(self.predictions[key])
+            time_expenses_mean = np.mean(self.time_expenses[key])
+            solution_score = predictions_mean / time_expenses_mean
             self.stats[key] = (
-                predictions_mean, '{}: predicted = {:.8f}+-{:.8f}'.format(
-                    key, predictions_mean, np.std(self.predictions[key])))
-            if predictions_mean > self.best_solution[0]:
-                self.best_solution = [predictions_mean, key]
-            if predictions_mean == 1.:
-                print('>>> {} solves task for all test cases with 100% accuracy on test subset <<<'.format(key))
-                exit()
+                solution_score, '{}: predicted = {:.8f}+-{:.8f} within avg {:.8f}s'.format(
+                    key, predictions_mean, np.std(self.predictions[key]), time_expenses_mean))
+            if solution_score > self.best_solution[0]:
+                self.best_solution = [solution_score, key]
 
     # Return number of steps used
     def train_model(self, model, train_data, train_target, context):
@@ -176,8 +179,7 @@ class Solution():
         step = 0
         test_predict_ratio = 0.
         while True:
-            time_left = context.get_timer().get_time_left()
-            if time_left < 0.1:
+            if context.get_timer().get_time_left() < 0.1:
                 break
             optimizer.zero_grad()
             train_output = model.forward(train_data_hard)
@@ -203,9 +205,9 @@ class Solution():
             optimizer.step()
             step += 1
         if self.grid_search.enabled:
-            self.save_experiment_summary(key, test_predict_ratio)
+            self.save_experiment_summary(key, test_predict_ratio, context.get_timer().get_execution_time())
             self.grid_search_counter += 1
-            print('{:>8} / {:>8}. So far achieved avg {:>20}/1 prediction on test subset using {}'.format(
+            print('{:>8} / {:>8}. So far achieved {:>20} score using {}'.format(
                 self.grid_search_counter, self.grid_search_size, self.best_solution[0], self.best_solution[1]), end='\r')
         return step
 
