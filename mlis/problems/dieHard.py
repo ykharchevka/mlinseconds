@@ -13,6 +13,12 @@
 # x0^x1
 # Hard function:
 # x2^x3^x4^x5^x6^x7
+"""
+added checking all test cases during grid search
+added showing best yet found solution
+using random generation of values in logarithmic scale to be checked by grid search for main ANN learning rate hyperparameter
+added grid search termination for the case when 100% accuracy solution is found
+"""
 import time
 import numpy as np
 import random
@@ -59,6 +65,7 @@ class Solution():
         self.sols = {}
         self.stats = {}
         self.predictions = {}
+        self.best_solution = [0., '']
         self.activations = {
             'sg': nn.Sigmoid(),
             'th': nn.Tanh(),
@@ -81,15 +88,15 @@ class Solution():
         self.nn_depth_main = 3
         self.nn_depth_main_grid = [3]
         self.nn_width_main = 32
-        self.nn_width_main_grid = [32]
+        self.nn_width_main_grid = [16, 32, 64]
         self.learning_rate_main = 0.5
-        self.learning_rate_main_grid = [0.5]
+        self.learning_rate_main_grid = 10 ** np.random.uniform(np.log10(1e-5), np.log10(1e2), 50)
         self.momentum_main = 0.9
-        self.momentum_main_grid = [0.9]
+        self.momentum_main_grid = [0.7, 0.8, 0.9]
         self.iter = -1
         self.iter_number = 20
         self.grid_search = GridSearch(self)
-        self.grid_search.set_enabled(False)
+        self.grid_search.set_enabled(True)
         self.grid_search_counter = 0
         self.grid_search_size = eval(str(self.iter_number) + '*' + '*'.join([str(len(v)) for k, v in self.__dict__.items() if k.endswith('_grid')]))
 
@@ -101,7 +108,7 @@ class Solution():
         return SolutionModel(input_size, output_size, self)
 
     def get_key(self):
-        return "eW{:02d}_eL{:.8f}_eM{:02f}_mD{:02d}_mW{:02d}_mL{:.8f}_mM{:.2f}".format(
+        return "eW{:02d}_eL{:.8f}_eM{:02f}_mD{:02d}_mW{:02d}_mL{:.16f}_mM{:.2f}".format(
             self.nn_width_easy, self.learning_rate_easy, self.momentum_easy, self.nn_depth_main, self.nn_width_main, self.learning_rate_main, self.momentum_main)
 
     def save_experiment_summary(self, key, prediction):
@@ -111,9 +118,15 @@ class Solution():
         self.sols[key] += 1
         self.predictions[key].append(prediction)
         if self.sols[key] == self.iter_number:
+            predictions_mean = np.mean(self.predictions[key])
             self.stats[key] = (
-                np.sum(prediction), '{}: predicted = {:.8f}+-{:.8f}'.format(
-                    key, np.mean(self.predictions[key]), np.std(self.predictions[key])))
+                predictions_mean, '{}: predicted = {:.8f}+-{:.8f}'.format(
+                    key, predictions_mean, np.std(self.predictions[key])))
+            if predictions_mean > self.best_solution[0]:
+                self.best_solution = [predictions_mean, key]
+            if predictions_mean == 1.:
+                print('>>> {} solves task for all test cases with 100% accuracy on test subset <<<'.format(key))
+                exit()
 
     # Return number of steps used
     def train_model(self, model, train_data, train_target, context):
@@ -192,7 +205,8 @@ class Solution():
         if self.grid_search.enabled:
             self.save_experiment_summary(key, test_predict_ratio)
             self.grid_search_counter += 1
-            print('{:>8} / {:>8}'.format(self.grid_search_counter, self.grid_search_size), end='\r')
+            print('{:>8} / {:>8}. So far achieved avg {:>20}/1 prediction on test subset using {}'.format(
+                self.grid_search_counter, self.grid_search_size, self.best_solution[0], self.best_solution[1]), end='\r')
         return step
 
 
