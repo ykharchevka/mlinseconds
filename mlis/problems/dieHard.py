@@ -14,11 +14,15 @@
 # Hard function:
 # x2^x3^x4^x5^x6^x7
 """
-added checking all test cases during grid search
-added showing best yet found solution
-using random generation of values in logarithmic scale to be checked by grid search for main ANN learning rate hyperparameter
-added grid search termination for the case when 100% accuracy solution is found. Then removed it as it doesn't give 100% reproducability :)
-added solution score = mean_test_accuracy / mean_time_expenses, which is to be maximized during grid search
+1. Primary goal was to find "easy" columns and vanish them to make ANN learn the solution by means of "hard" columns. Once the ANN for finding easy columns was built and tuned a bit, not much sense remained in tuning it further as it was just either working or not.
+
+2. Added checking all test cases during grid search. Fixed couple bugs on my way. Now grid search gives results that are 100% reproducible during common runs (if to preserve hyperparameters with exact accuracy).
+
+3. Added showing best yet found solution.
+
+4. Using random generation of values in logarithmic scale to be checked by grid search for main ANN learning rate hyperparameter.
+
+5. Added solution score = mean_test_accuracy / mean_time_expenses, which is to be maximized during grid search
 """
 import time
 import numpy as np
