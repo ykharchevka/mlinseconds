@@ -178,4 +178,4 @@ class Config:
         return Solution()
 
 # If you want to run specific case, put number here
-sm.SolutionManager(Config()).run(case_number=4)
+sm.SolutionManager(Config()).run(case_number=-1)
