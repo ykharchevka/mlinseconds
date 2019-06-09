@@ -89,22 +89,22 @@ class Solution():
         self.momentum_easy = 0.9
         self.momentum_easy_grid = [0.9]
         self.nn_depth_main = 3
-        self.nn_depth_main_grid = [2, 3, 4]
-        self.nn_width_main = 16
-        self.nn_width_main_grid = random.sample(range(8, 129), 50)
-        self.learning_rate_main = 1.9447023047250203
-        self.learning_rate_main_grid = 10 ** np.random.uniform(np.log10(1e-5), np.log10(1e2), 500)
+        self.nn_depth_main_grid = [3]
+        self.nn_width_main = 32
+        self.nn_width_main_grid = [32]  # random.sample(range(8, 129), 50)
+        self.learning_rate_main = 1.6534358455571012
+        self.learning_rate_main_grid = np.random.uniform(1.65, 1.68, 20) # 10 ** np.random.uniform(np.log10(1e-6), np.log10(1e2), 20)
         self.momentum_main = 0.9
-        self.momentum_main_grid = np.random.uniform(0.7, 0.99, 20)
+        self.momentum_main_grid = [0.9]  # np.random.uniform(0.01, 0.99, 20)
         self.iter = -1
         self.iter_number = 20
         self.grid_search = GridSearch(self)
-        self.grid_search.set_enabled(True)
+        self.grid_search.set_enabled(False)
         self.grid_search_counter = 0
         self.grid_search_size = eval(str(self.iter_number) + '*' + '*'.join([str(len(v)) for k, v in self.__dict__.items() if k.endswith('_grid')]))
 
     def __del__(self):
-        for item in sorted(self.stats.items(), key=lambda kv: kv[1][0], reverse=True):
+        for item in sorted(self.stats.items(), key=lambda kv: kv[1][0]):  # bottom(best)-to-top(worst) sorting
             print(item[1][1])
 
     def create_model(self, input_size, output_size):
