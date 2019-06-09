@@ -62,14 +62,6 @@ class Solution():
             time_left = context.get_timer().get_time_left()
             # No more time left, stop training
             if time_left < 0.1:
-
-                print('---------- TRAIN ---------')
-                train_output = model(train_data)
-                train_predict = model.calc_predict(train_output)
-                for k, v in enumerate(zip(train_data, train_predict, train_target), start=1):
-                    print('{:>3}.'.format(k), v[0].to(torch.int).tolist(), ' >> ', int(v[1].item()), ' // ',
-                          int(v[2].item()), ' == ', '+' if int(v[1].item()) == int(v[2].item()) else '-')
-
                 break
             optimizer = optim.SGD(model.parameters(), lr=0.1)
             data = train_data
